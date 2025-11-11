@@ -54,17 +54,26 @@ export function createSimplePdfFromPages(pages: PdfRun[][]): Blob {
     const stream = contentLines.join('\n');
     const streamLength = new TextEncoder().encode(stream).length;
     contentsObjects.push(`<< /Length ${streamLength} >>\nstream\n${stream}\nendstream`);
+    
+    // The object index for a page's content stream is 3 (Catalog, Pages Root) + number of pages + the current page's index.
+    const contentStreamObjIndex = 3 + pages.length + pageIndex;
+    
     pageObjects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH.toFixed(2)} ${PAGE_HEIGHT.toFixed(2)}] /Contents ${3 + pageObjects.length + 1} 0 R /Resources << /Font << /F1 ${3 + pageObjects.length + contentsObjects.length} 0 R /F2 ${3 + pageObjects.length + contentsObjects.length + 1} 0 R >> >> >>`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH.toFixed(2)} ${PAGE_HEIGHT.toFixed(2)}] /Contents ${contentStreamObjIndex} 0 R /Resources << /Font << /F1 ${3 + pages.length * 2} 0 R /F2 ${3 + pages.length * 2 + 1} 0 R >> >> >>`,
     );
   });
 
   const objects: string[] = [];
+  // 1: Catalog
   objects.push('<< /Type /Catalog /Pages 2 0 R >>');
+  // 2: Pages Root
   const kids = pageObjects.map((_, i) => `${i + 3} 0 R`).join(' ');
   objects.push(`<< /Type /Pages /Kids [${kids}] /Count ${pageObjects.length} >>`);
+  // 3...: Page Objects
   objects.push(...pageObjects);
+  // ...: Content Stream Objects
   objects.push(...contentsObjects);
+  // ...: Font Objects
   objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
   objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>');
 
