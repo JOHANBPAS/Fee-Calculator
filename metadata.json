@@ -1,0 +1,5 @@
+{
+  "name": "Basket Fee Generator",
+  "description": "A comprehensive fee calculation tool for architectural and engineering projects, featuring modes for basket-of-goods, SACAP guidelines, hourly rates, and BIM services.",
+  "requestFramePermissions": []
+}
