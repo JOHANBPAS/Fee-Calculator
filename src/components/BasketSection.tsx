@@ -5,8 +5,9 @@ import { currency, currencyPlain, pctFmt } from '../utils/formatting';
 import { exportExcelTable, saveBlob } from '../utils/export';
 import { createSimplePdfFromPages, SIMPLE_PDF_PAGE } from '../services/pdfService';
 import { calculateFee } from '../services/feeService';
-import { RESULT_ROWS } from '../constants';
+import { RESULT_ROWS, BRAND_COLORS } from '../constants';
 import { Tooltip } from './Tooltip';
+import { getProjectDetailsSnapshot, formatExportDate } from '../utils/projectDetails';
 
 interface ManualRow {
   id: string;
@@ -136,6 +137,8 @@ export function BasketSection({ globalVow, onVowChange, vatPct, clientName }: Ba
   const handleExportExcel = () => {
     const headers = ['Category', 'Professional', 'VOW Override (ZAR)', 'Effective % of VOW', 'Base Fee (ZAR)', 'Proposed Fee (ZAR)'];
     const excelRows: string[][] = [];
+    const projectDetails = getProjectDetailsSnapshot({ clientName });
+    const introRows = [...projectDetails.rows, ['Exported On', formatExportDate()]];
     
     const addRow = (cat: string, r: (typeof processedRows)[0]) => {
       excelRows.push([
@@ -163,49 +166,115 @@ export function BasketSection({ globalVow, onVowChange, vatPct, clientName }: Ba
     excelRows.push(['Summary', 'TOTAL (ex VAT)', '', '', '', currencyPlain(subtotal)]);
     excelRows.push(['Summary', `VAT (${vatPct}%)`, '', '', '', currencyPlain(vat)]);
     excelRows.push(['Summary', 'TOTAL (inc VAT)', '', '', '', currencyPlain(total)]);
-    exportExcelTable('basket_of_fees.xls', headers, excelRows);
+    exportExcelTable('basket_of_fees.xls', headers, excelRows, { intro: { headers: ['Project Detail', 'Value'], rows: introRows } });
   };
   
   const handleExportPdf = () => {
+    const projectDetails = getProjectDetailsSnapshot({ clientName });
+    const detailRows = [...projectDetails.rows, ['Exported On', formatExportDate()]];
     const pages: PdfRun[][] = [];
+    const brand = BRAND_COLORS;
+    const margin = 48;
+    const width = SIMPLE_PDF_PAGE.width - margin * 2;
+    const tableWidth = width + 20;
+    const headerX = margin - 10;
+    const columnX = [margin, margin + 190, margin + 305, margin + 400, margin + 500];
     let cur: PdfRun[] = [];
-    let y = SIMPLE_PDF_PAGE.height - 40;
-    
-    const line = (txt: string, x: number, y: number, size = 10, bold = false): PdfRun => ({ text: txt, x, y, size, font: bold ? 'bold' : 'regular' });
-    const checkBreak = () => { if (y < 40) { pages.push(cur); cur = []; y = SIMPLE_PDF_PAGE.height - 40; }};
-    
-    cur.push(line(`Basket of Fees - ${clientName || 'Untitled'}`, 40, y, 14, true)); y -= 20;
-    cur.push(line(`Global Value of Works: ${currencyPlain(globalVow)}`, 40, y, 10)); y -= 20;
+    let y = 0;
 
-    const colX = [40, 240, 320, 400, 480];
-    const addRow = (cols: string[], isHeader = false, isBold = false) => {
-        checkBreak();
-        cols.forEach((text, i) => cur.push(line(text, colX[i], y, isHeader ? 9 : 10, isHeader || isBold)));
-        y -= (isHeader ? 12 : 15);
+    const rect = (x: number, top: number, w: number, h: number, fill?: [number, number, number], stroke?: [number, number, number], strokeWidth?: number) => {
+      cur.push({ kind: 'rect', x, y: top - h, width: w, height: h, fill, stroke, strokeWidth });
+    };
+    const text = (value: string, x: number, yPos: number, size = 10, bold = false, color = brand.charcoal) => {
+      cur.push({ text: value, x, y: yPos, size, font: bold ? 'bold' : 'regular', color });
     };
 
-    addRow(['Professional', 'VOW Override', 'Effective %', 'Base Fee', 'Proposed Fee'], true);
-    y -= 2;
-
-    const renderGroup = (groupName: string, groupKey: 'management' | 'professional', isManual = false) => {
-        const groupRows = processedRows.filter(r => r.enabled && r.group === groupKey && r.isManual === isManual);
-        if (groupRows.length === 0) return;
-        y -= 5;
-        cur.push(line(groupName, 40, y, 11, true)); y -= 18;
-        groupRows.forEach(r => {
-            addRow([r.label, r.isManual ? 'N/A' : currencyPlain(vowOverride[r.key as ResultKey] || 0), pctFmt(r.effectivePct), currencyPlain(r.baseFee), currencyPlain(r.proposedFee)]);
+    const drawHeader = (withDetails: boolean) => {
+      const headerHeight = 70;
+      rect(headerX, y, tableWidth, headerHeight, brand.charcoal);
+      rect(headerX, y - headerHeight - 4, tableWidth, 4, brand.accent);
+      text('Fee Proposal', margin, y - 26, 18, true, brand.light);
+      text('Basket of Fees', margin, y - 44, 12, false, brand.light);
+      text(projectDetails.clientName || 'Unnamed Client', margin + width - 160, y - 28, 9, false, brand.light);
+      text(detailRows.at(-1)?.[1] ?? '', margin + width - 160, y - 42, 9, false, brand.light);
+      y -= headerHeight + 18;
+      if (withDetails) {
+        detailRows.forEach(([label, value]) => {
+          const rowHeight = 20;
+          rect(headerX, y, tableWidth, rowHeight, brand.light);
+          text(label, margin, y - 6, 9, true, brand.slate);
+          text(value, margin + width / 2, y - 6, 10, false, brand.charcoal);
+          y -= rowHeight;
         });
+        y -= 14;
+      }
+    };
+
+    const startPage = (withDetails: boolean) => {
+      cur = [];
+      y = SIMPLE_PDF_PAGE.height - margin;
+      drawHeader(withDetails);
+    };
+
+    const checkBreak = (space = 60) => {
+      if (y < margin + space) {
+        pages.push(cur);
+        startPage(false);
+      }
+    };
+
+    const addRow = (cols: string[], opts?: { header?: boolean; bold?: boolean }) => {
+      checkBreak(opts?.header ? 80 : 50);
+      if (opts?.header) rect(headerX, y + 6, tableWidth, 18, brand.slate);
+      cols.forEach((val, idx) => {
+        text(val, columnX[idx], y, opts?.header ? 9 : 10, opts?.header || opts?.bold, opts?.header ? brand.light : brand.charcoal);
+      });
+      y -= opts?.header ? 18 : 16;
+    };
+
+    const addSectionTitle = (label: string) => {
+      checkBreak();
+      y -= 4;
+      text(label, margin, y, 11, true, brand.slate);
+      y -= 14;
+    };
+
+    const addSummary = (label: string, value: string, highlight = false) => {
+      const rowHeight = 20;
+      checkBreak();
+      rect(headerX, y, tableWidth, rowHeight, highlight ? brand.accent : brand.light);
+      text(label, margin, y - 6, 10, true, highlight ? brand.charcoal : brand.slate);
+      text(value, margin + width - 80, y - 6, 10, true, brand.charcoal);
+      y -= rowHeight;
+    };
+
+    startPage(true);
+    addRow(['Professional', 'VOW Override', 'Effective %', 'Base Fee', 'Proposed Fee'], { header: true });
+
+    const renderGroup = (label: string, groupKey: 'management' | 'professional', isManual = false) => {
+      const rows = processedRows.filter(r => r.enabled && r.group === groupKey && r.isManual === isManual);
+      if (!rows.length) return;
+      addSectionTitle(label);
+      rows.forEach(r => {
+        addRow([
+          r.label,
+          r.isManual ? 'N/A' : currencyPlain(vowOverride[r.key as ResultKey] || 0),
+          pctFmt(r.effectivePct),
+          currencyPlain(r.baseFee),
+          currencyPlain(r.proposedFee),
+        ]);
+      });
     };
 
     renderGroup('Management Consultants', 'management');
     renderGroup('Professionals', 'professional');
     renderGroup('Non-Core Consultants', 'professional', true);
 
-    y -= 10;
-    addRow(['Subtotal (ex VAT)', '', '', '', currencyPlain(subtotal)], false, true);
-    addRow([`VAT (${vatPct}%)`, '', '', '', currencyPlain(vat)]);
-    addRow(['TOTAL (inc VAT)', '', '', '', currencyPlain(total)], false, true);
-    
+    y -= 6;
+    addSummary('Subtotal (ex VAT)', currencyPlain(subtotal));
+    addSummary(`VAT (${vatPct}%)`, currencyPlain(vat));
+    addSummary('TOTAL (inc VAT)', currencyPlain(total), true);
+
     pages.push(cur);
     saveBlob('basket_of_fees.pdf', createSimplePdfFromPages(pages));
   };

@@ -7,6 +7,7 @@ export interface SimplePdfRun {
   y: number;
   size?: number;
   font?: 'regular' | 'bold';
+  color?: [number, number, number];
 }
 
 export interface SimplePdfImageRun {
@@ -26,9 +27,21 @@ export interface SimplePdfLineRun {
   y2: number;
   width?: number;
   gray?: number;
+  color?: [number, number, number];
 }
 
-export type PdfRun = SimplePdfRun | SimplePdfImageRun | SimplePdfLineRun;
+export interface SimplePdfRectRun {
+  kind: 'rect';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  fill?: [number, number, number];
+  stroke?: [number, number, number];
+  strokeWidth?: number;
+}
+
+export type PdfRun = SimplePdfRun | SimplePdfImageRun | SimplePdfLineRun | SimplePdfRectRun;
 
 // Fee Calculation types
 export type RoleKey = 'director' | 'senior_architect' | 'architect' | 'technologist' | 'junior' | 'admin';

@@ -4,7 +4,8 @@ import { useLocalStorageState, useLocalStorageString } from '../hooks/useLocalSt
 import { currency, currencyPlain } from '../utils/formatting';
 import { exportExcelTable, saveBlob } from '../utils/export';
 import { createSimplePdfFromPages, SIMPLE_PDF_PAGE } from '../services/pdfService';
-import { ROLE_LABEL } from '../constants';
+import { ROLE_LABEL, BRAND_COLORS } from '../constants';
+import { getProjectDetailsSnapshot, formatExportDate } from '../utils/projectDetails';
 
 interface PhaseHoursProps {
     rates: Record<RoleKey, number>;
@@ -77,8 +78,8 @@ export function HourlySection({ vatPct }: HourlySectionProps) {
         const headers = ['Phase', 'Role', 'Rate (ZAR/h)', 'Hours', 'Amount (ZAR)'];
         const rows: string[][] = [];
         
-        rows.push(['Project:', projectName]);
-        rows.push([]);
+        const projectDetails = getProjectDetailsSnapshot();
+        const introRows = [...projectDetails.rows, ['Hourly Project Name', projectName || 'Untitled'], ['Exported On', formatExportDate()]];
 
         storedPhases.forEach(p => {
             let phaseTotal = 0;
@@ -100,39 +101,113 @@ export function HourlySection({ vatPct }: HourlySectionProps) {
         rows.push(['', 'GRAND TOTAL (ex VAT)', '', '', currencyPlain(subtotal)]);
         rows.push(['', `VAT (${vatPct}%)`, '', '', currencyPlain(vat)]);
         rows.push(['', 'GRAND TOTAL (inc VAT)', '', '', currencyPlain(total)]);
-        exportExcelTable('hourly_fees.xls', headers, rows);
+        exportExcelTable('hourly_fees.xls', headers, rows, { intro: { headers: ['Project Detail', 'Value'], rows: introRows } });
     };
 
     const handleExportPdf = () => {
         const storedPhases = JSON.parse(localStorage.getItem('hourlyPhaseRoles') || '[]') as HourlyPhase[];
         const projectName = localStorage.getItem('hourlyProjectName') || 'Untitled Project';
+        const projectDetails = getProjectDetailsSnapshot();
+        const detailRows = [...projectDetails.rows, ['Hourly Project Name', projectName || 'Untitled'], ['Exported On', formatExportDate()]];
 
         const pages: PdfRun[][] = [];
+        const brand = BRAND_COLORS;
+        const margin = 48;
+        const width = SIMPLE_PDF_PAGE.width - margin * 2;
+        const tableWidth = width + 20;
+        const headerX = margin - 10;
+        const colX = [margin, margin + 200, margin + 320, margin + 430];
         let cur: PdfRun[] = [];
-        let y = SIMPLE_PDF_PAGE.height - 40;
+        let y = 0;
 
-        const line = (txt: string, x: number, y: number, size = 10, bold = false): PdfRun => ({ text: txt, x, y, size, font: bold ? 'bold' : 'regular' });
-        const checkPageBreak = () => {
-            if (y < 40) { pages.push(cur); cur = []; y = SIMPLE_PDF_PAGE.height - 40; }
+        const rect = (x: number, top: number, w: number, h: number, fill?: [number, number, number], stroke?: [number, number, number], strokeWidth?: number) => {
+            cur.push({ kind: 'rect', x, y: top - h, width: w, height: h, fill, stroke, strokeWidth });
+        };
+        const text = (value: string, x: number, yPos: number, size = 10, bold = false, color = brand.charcoal) => {
+            cur.push({ text: value, x, y: yPos, size, font: bold ? 'bold' : 'regular', color });
         };
 
-        cur.push(line(`Hourly Fee Summary - ${projectName}`, 40, y, 14, true)); y -= 25;
-
-        const colX = [40, 240, 320, 380, 450];
-        const addRow = (cols: string[], isHeader = false, isBold = false) => {
-            checkPageBreak();
-            cols.forEach((text, i) => cur.push(line(text, colX[i], y, isHeader ? 9 : 10, isHeader || isBold)));
-            y -= (isHeader ? 12 : 15);
+        const drawHeader = (withDetails: boolean) => {
+            const headerHeight = 70;
+            rect(headerX, y, tableWidth, headerHeight, brand.charcoal);
+            rect(headerX, y - headerHeight - 4, tableWidth, 4, brand.accent);
+            text('Fee Proposal', margin, y - 26, 18, true, brand.light);
+            text('Hourly Services', margin, y - 44, 12, false, brand.light);
+            text(projectDetails.clientName || 'Unnamed Client', margin + width - 160, y - 28, 9, false, brand.light);
+            text(detailRows.at(-1)?.[1] ?? '', margin + width - 160, y - 42, 9, false, brand.light);
+            y -= headerHeight + 18;
+            if (withDetails) {
+                detailRows.forEach(([label, value]) => {
+                    const rowHeight = 20;
+                    rect(headerX, y, tableWidth, rowHeight, brand.light);
+                    text(label, margin, y - 6, 9, true, brand.slate);
+                    text(value, margin + width / 2, y - 6, 10, false, brand.charcoal);
+                    y -= rowHeight;
+                });
+                y -= 10;
+            }
         };
+
+        const startPage = (withDetails: boolean) => {
+            cur = [];
+            y = SIMPLE_PDF_PAGE.height - margin;
+            drawHeader(withDetails);
+        };
+
+        const checkBreak = (space = 60) => {
+            if (y < margin + space) {
+                pages.push(cur);
+                startPage(false);
+            }
+        };
+
+        const addRow = (cols: string[], opts?: { header?: boolean; bold?: boolean }) => {
+            checkBreak(opts?.header ? 90 : 60);
+            if (opts?.header) rect(headerX, y + 6, tableWidth, 18, brand.slate);
+            cols.forEach((val, idx) => {
+                text(val, colX[idx], y, opts?.header ? 9 : 10, opts?.header || opts?.bold, opts?.header ? brand.light : brand.charcoal);
+            });
+            y -= opts?.header ? 18 : 16;
+        };
+
+        const addSummary = (label: string, value: string, highlight = false) => {
+            const rowHeight = 20;
+            checkBreak();
+            rect(headerX, y, tableWidth, rowHeight, highlight ? brand.accent : brand.light);
+            text(label, margin, y - 6, 10, true, highlight ? brand.charcoal : brand.slate);
+            text(value, margin + width - 80, y - 6, 10, true, brand.charcoal);
+            y -= rowHeight;
+        };
+
+        const addCards = () => {
+            const cards: [string, string][] = [
+                ['Subtotal (ex VAT)', currencyPlain(subtotal)],
+                [`VAT (${vatPct}%)`, currencyPlain(vat)],
+                ['Total (inc VAT)', currencyPlain(total)],
+            ];
+            const cardWidth = (width - 20) / cards.length;
+            checkBreak(140);
+            cards.forEach(([label, value], idx) => {
+                const cardX = margin + idx * (cardWidth + 10);
+                rect(cardX, y, cardWidth, 42, brand.light);
+                text(label, cardX + 6, y - 14, 9, true, brand.slate);
+                text(value, cardX + 6, y - 26, 12, true, brand.charcoal);
+            });
+            y -= 48;
+        };
+
+        startPage(true);
+        addCards();
 
         storedPhases.forEach(p => {
             const relevantHours = (Object.keys(p.hours) as RoleKey[]).filter(rk => (p.hours[rk] || 0) > 0);
             if (relevantHours.length === 0) return;
 
-            checkPageBreak();
-            y -= 5;
-            cur.push(line(p.name, 40, y, 11, true)); y-= 18;
-            addRow(['Role', 'Rate', 'Hours', 'Amount'], true);
+            checkBreak();
+            y -= 4;
+            text(p.name, margin, y, 11, true, brand.slate);
+            y -= 16;
+            addRow(['Role', 'Rate', 'Hours', 'Amount'], { header: true });
 
             let phaseTotal = 0;
             relevantHours.forEach(rk => {
@@ -142,15 +217,15 @@ export function HourlySection({ vatPct }: HourlySectionProps) {
                 phaseTotal += amount;
                 addRow([ROLE_LABEL[rk], currencyPlain(rate), String(hrs), currencyPlain(amount)]);
             });
-            y-= 2;
-            addRow(['Phase Total', '', '', currencyPlain(phaseTotal)], false, true);
-            y-= 10;
+            y -= 4;
+            addSummary(`${p.name} Total`, currencyPlain(phaseTotal));
+            y -= 8;
         });
-        
-        y -= 10;
-        addRow(['GRAND TOTAL (ex VAT)', '', '', currencyPlain(subtotal)], false, true);
-        addRow([`VAT (${vatPct}%)`, '', '', currencyPlain(vat)]);
-        addRow(['GRAND TOTAL (inc VAT)', '', '', currencyPlain(total)], false, true);
+
+        y -= 6;
+        addSummary('GRAND TOTAL (ex VAT)', currencyPlain(subtotal));
+        addSummary(`VAT (${vatPct}%)`, currencyPlain(vat));
+        addSummary('GRAND TOTAL (inc VAT)', currencyPlain(total), true);
 
         pages.push(cur);
         saveBlob('hourly_summary.pdf', createSimplePdfFromPages(pages));

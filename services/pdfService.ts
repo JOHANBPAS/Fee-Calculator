@@ -1,5 +1,5 @@
 
-import type { PdfRun, SimplePdfRun, SimplePdfImageRun, SimplePdfLineRun } from '../types';
+import type { PdfRun, SimplePdfRun, SimplePdfImageRun, SimplePdfLineRun, SimplePdfRectRun } from '../types';
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -28,6 +28,9 @@ function sanitizeText(text: string): string {
     .join('');
 }
 
+const colorString = (color: [number, number, number]) =>
+  `${Math.min(1, Math.max(0, color[0])).toFixed(2)} ${Math.min(1, Math.max(0, color[1])).toFixed(2)} ${Math.min(1, Math.max(0, color[2])).toFixed(2)}`;
+
 export function createSimplePdfFromPages(pages: PdfRun[][]): Blob {
   const pageObjects: string[] = [];
   const contentsObjects: string[] = [];
@@ -40,8 +43,25 @@ export function createSimplePdfFromPages(pages: PdfRun[][]): Blob {
       } else if ('kind' in run && run.kind === 'line') {
         const ln = run as SimplePdfLineRun;
         const w = (ln.width ?? 1).toFixed(2);
-        const g = Math.max(0, Math.min(1, ln.gray ?? 0));
-        return `q ${g.toFixed(2)} G ${w} w ${ln.x1.toFixed(2)} ${ln.y1.toFixed(2)} m ${ln.x2.toFixed(2)} ${ln.y2.toFixed(2)} l S Q`;
+        const color = ln.color
+          ? colorString(ln.color)
+          : (() => {
+              const g = Math.max(0, Math.min(1, ln.gray ?? 0));
+              return `${g.toFixed(2)} ${g.toFixed(2)} ${g.toFixed(2)}`;
+            })();
+        return `q ${color} RG ${w} w ${ln.x1.toFixed(2)} ${ln.y1.toFixed(2)} m ${ln.x2.toFixed(2)} ${ln.y2.toFixed(2)} l S Q`;
+      } else if ('kind' in run && run.kind === 'rect') {
+        const rect = run as SimplePdfRectRun;
+        const commands: string[] = ['q'];
+        if (rect.fill) commands.push(`${colorString(rect.fill)} rg`);
+        if (rect.stroke) commands.push(`${colorString(rect.stroke)} RG`);
+        if (rect.strokeWidth) commands.push(`${rect.strokeWidth.toFixed(2)} w`);
+        commands.push(`${rect.x.toFixed(2)} ${rect.y.toFixed(2)} ${rect.width.toFixed(2)} ${rect.height.toFixed(2)} re`);
+        if (rect.fill && rect.stroke) commands.push('B');
+        else if (rect.fill) commands.push('f');
+        else if (rect.stroke) commands.push('S');
+        commands.push('Q');
+        return commands.join(' ');
       } else {
         const tr = run as SimplePdfRun;
         const font = tr.font === 'bold' ? '/F2' : '/F1';
@@ -49,7 +69,8 @@ export function createSimplePdfFromPages(pages: PdfRun[][]): Blob {
         const x = tr.x.toFixed(2);
         const y = tr.y.toFixed(2);
         const text = sanitizeText(tr.text);
-        return `BT ${font} ${size} Tf 1 0 0 1 ${x} ${y} Tm (${text}) Tj ET`;
+        const color = colorString(tr.color ?? [0, 0, 0]);
+        return `${color} rg\nBT ${font} ${size} Tf 1 0 0 1 ${x} ${y} Tm (${text}) Tj ET`;
       }
     });
     const stream = contentLines.join('\n');

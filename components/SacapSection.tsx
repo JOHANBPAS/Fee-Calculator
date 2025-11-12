@@ -4,7 +4,8 @@ import { useLocalStorageNumber, useLocalStorageState, useLocalStorageString } fr
 import { currency, currencyPlain } from '../utils/formatting';
 import { exportExcelTable, saveBlob } from '../utils/export';
 import { createSimplePdfFromPages, SIMPLE_PDF_PAGE } from '../services/pdfService';
-import { AECOM_RATES, defaultRate, ARC_LOW, ARC_MED, ARC_HIGH } from '../constants';
+import { AECOM_RATES, defaultRate, ARC_LOW, ARC_MED, ARC_HIGH, BRAND_COLORS } from '../constants';
+import { getProjectDetailsSnapshot, formatExportDate } from '../utils/projectDetails';
 
 interface SacapSectionProps {
   globalVow: number;
@@ -39,11 +40,9 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
   const selectedAecom = aecomOptions.find(item => item.key === aecomKey) ?? aecomOptions[0];
   const aecomRate = selectedAecom ? (aecomRateChoice === 'min' ? selectedAecom.min : aecomRateChoice === 'max' ? selectedAecom.max : defaultRate(selectedAecom)) : 0;
   const aecomEstimate = selectedAecom ? Math.max(0, Math.round(aecomRate * Math.max(0, aecomSize || 0))) : 0;
-  const complexityLabel = complexity === 'low' ? 'Low Complexity' : complexity === 'medium' ? 'Medium Complexity' : 'High Complexity';
-  const buildingCategory = selectedAecom?.group ?? 'Custom selection';
-  const buildingTypeLabel = selectedAecom?.label ?? 'Manual entry';
-  const buildingSizeLabel = aecomSize > 0 ? `${aecomSize.toLocaleString('en-ZA')} m²` : 'Not specified';
-  const exportedOn = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const exportedOn = formatExportDate();
+  const projectDetails = getProjectDetailsSnapshot({ aecomKey, aecomSize, complexity });
+  const projectDetailRows = [...projectDetails.rows, ['Exported On', exportedOn]];
 
   const baseFee = useMemo(() => {
     const table = complexity === 'low' ? ARC_LOW : complexity === 'medium' ? ARC_MED : ARC_HIGH;
@@ -80,13 +79,6 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
       currencyPlain(r.override),
       currencyPlain(r.amount),
     ]);
-    const projectDetailsRows = [
-      ['Building Category', buildingCategory],
-      ['Building Type', buildingTypeLabel],
-      ['Building Size', buildingSizeLabel],
-      ['Project Complexity', complexityLabel],
-      ['Exported On', exportedOn],
-    ];
     excelRows.push([]); // spacer
     excelRows.push(['Summary', 'Value of Works', '', '', currencyPlain(vow)]);
     excelRows.push(['Summary', 'Base Fee', '', '', currencyPlain(baseFee)]);
@@ -95,55 +87,102 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
     excelRows.push(['Summary', `VAT (${vatPct}%)`, '', '', currencyPlain(vat)]);
     excelRows.push(['Summary', 'TOTAL (inc VAT)', '', '', currencyPlain(total)]);
     excelRows.push(['Summary', 'Overall discount (%)', `${overallDiscountPct}%`, '', '']);
-    exportExcelTable('sacap.xls', headers, excelRows, { intro: { headers: ['Project Detail', 'Value'], rows: projectDetailsRows } });
+    exportExcelTable('sacap.xls', headers, excelRows, { intro: { headers: ['Project Detail', 'Value'], rows: projectDetailRows } });
   };
 
   const handleExportPdf = () => {
+    const detailRows = [...projectDetailRows];
     const pages: PdfRun[][] = [];
+    const brand = BRAND_COLORS;
+    const margin = 48;
+    const width = SIMPLE_PDF_PAGE.width - margin * 2;
+    const tableWidth = width + 20;
+    const headerX = margin - 10;
+    const colX = [margin, margin + 190, margin + 280, margin + 370, margin + 480];
     let cur: PdfRun[] = [];
-    let y = SIMPLE_PDF_PAGE.height - 40;
+    let y = 0;
 
-    const line = (txt: string, x: number, y: number, size = 10, bold = false): PdfRun => ({ text: txt, x, y, size, font: bold ? 'bold' : 'regular' });
-
-    const checkPageBreak = () => {
-        if (y < 40) {
-            pages.push(cur);
-            cur = [];
-            y = SIMPLE_PDF_PAGE.height - 40;
-        }
+    const rect = (x: number, top: number, w: number, h: number, fill?: [number, number, number], stroke?: [number, number, number], strokeWidth?: number) => {
+      cur.push({ kind: 'rect', x, y: top - h, width: w, height: h, fill, stroke, strokeWidth });
     };
-    
-    cur.push(line('SACAP Fee Summary', 40, y, 14, true)); y -= 20;
-    cur.push(line(`Value of Works: ${currencyPlain(vow)}`, 40, y, 10)); y -= 15;
-    cur.push(line(`Base Fee: ${currencyPlain(baseFee)}`, 40, y, 10)); y-= 20;
-
-    const addDetailPair = (label: string, value: string) => {
-        checkPageBreak();
-        cur.push(line(label, 40, y, 10, true));
-        cur.push(line(value, 220, y, 10));
-        y -= 14;
+    const text = (value: string, x: number, yPos: number, size = 10, bold = false, color = brand.charcoal) => {
+      cur.push({ text: value, x, y: yPos, size, font: bold ? 'bold' : 'regular', color });
     };
 
-    cur.push(line('Project Details', 40, y, 12, true)); y -= 16;
-    [
-        ['Building Category', buildingCategory],
-        ['Building Type', buildingTypeLabel],
-        ['Building Size', buildingSizeLabel],
-        ['Project Complexity', complexityLabel],
-        ['Exported On', exportedOn],
-    ].forEach(([label, value]) => addDetailPair(label, value));
-    y -= 6;
-    cur.push(line('Fee Apportionment Summary', 40, y, 12, true)); y -= 18;
-
-    const colX = [40, 250, 320, 400, 480];
-    const addRow = (cols: string[], isHeader = false, isBold = false) => {
-        checkPageBreak();
-        cols.forEach((text, i) => cur.push(line(text, colX[i], y, isHeader ? 9 : 10, isHeader || isBold)));
-        y -= (isHeader ? 12 : 15);
+    const drawHeader = (withDetails: boolean) => {
+      const headerHeight = 70;
+      rect(headerX, y, tableWidth, headerHeight, brand.charcoal);
+      rect(headerX, y - headerHeight - 4, tableWidth, 4, brand.accent);
+      text('Fee Proposal', margin, y - 26, 18, true, brand.light);
+      text('SACAP Fee Generator', margin, y - 44, 12, false, brand.light);
+      text(projectDetails.clientName || 'Unnamed Client', margin + width - 160, y - 28, 9, false, brand.light);
+      text(detailRows.at(-1)?.[1] ?? '', margin + width - 160, y - 42, 9, false, brand.light);
+      y -= headerHeight + 18;
+      if (withDetails) {
+        detailRows.forEach(([label, value]) => {
+          const rowHeight = 20;
+          rect(headerX, y, tableWidth, rowHeight, brand.light);
+          text(label, margin, y - 6, 9, true, brand.slate);
+          text(value, margin + width / 2, y - 6, 10, false, brand.charcoal);
+          y -= rowHeight;
+        });
+        y -= 10;
+      }
     };
 
-    addRow(['Stage', '% of Base', 'Discount %', 'Override', 'Amount'], true);
-    y -= 2;
+    const startPage = (withDetails: boolean) => {
+      cur = [];
+      y = SIMPLE_PDF_PAGE.height - margin;
+      drawHeader(withDetails);
+    };
+
+    const checkBreak = (space = 60) => {
+      if (y < margin + space) {
+        pages.push(cur);
+        startPage(false);
+      }
+    };
+
+    const addRow = (cols: string[], opts?: { header?: boolean; bold?: boolean }) => {
+      checkBreak(opts?.header ? 90 : 60);
+      if (opts?.header) rect(headerX, y + 6, tableWidth, 18, brand.slate);
+      cols.forEach((val, idx) => {
+        text(val, colX[idx], y, opts?.header ? 9 : 10, opts?.header || opts?.bold, opts?.header ? brand.light : brand.charcoal);
+      });
+      y -= opts?.header ? 18 : 16;
+    };
+
+    const addCards = () => {
+      const cards: [string, string][] = [
+        ['Value of Works', currencyPlain(vow)],
+        ['Base Fee', currencyPlain(baseFee)],
+        ['Overall Discount', `${overallDiscountPct}%`],
+      ];
+      const cardWidth = (width - 20) / cards.length;
+      checkBreak(140);
+      cards.forEach(([label, value], idx) => {
+        const cardX = margin + idx * (cardWidth + 10);
+        rect(cardX, y, cardWidth, 42, brand.light);
+        text(label, cardX + 6, y - 14, 9, true, brand.slate);
+        text(value, cardX + 6, y - 26, 12, true, brand.charcoal);
+      });
+      y -= 48;
+    };
+
+    const addSummary = (label: string, value: string, highlight = false) => {
+      const rowHeight = 20;
+      checkBreak();
+      rect(headerX, y, tableWidth, rowHeight, highlight ? brand.accent : brand.light);
+      text(label, margin, y - 6, 10, true, highlight ? brand.charcoal : brand.slate);
+      text(value, margin + width - 80, y - 6, 10, true, brand.charcoal);
+      y -= rowHeight;
+    };
+
+    startPage(true);
+    addCards();
+    text('Fee Apportionment Summary', margin, y, 12, true, brand.slate);
+    y -= 18;
+    addRow(['Stage', '% of Base', 'Discount %', 'Override', 'Amount'], { header: true });
 
     enabledRows.forEach((r) => {
       addRow([
@@ -155,15 +194,14 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
       ]);
     });
 
-    y -= 10;
-    addRow(['Total Discount Amount:', '', '', '', currencyPlain(totalDiscountAmount)], false, true);
-    addRow(['Subtotal (ex VAT):', '', '', '', currencyPlain(subtotal)], false, true);
-    addRow([`VAT (${vatPct}%):`, '', '', '', currencyPlain(vat)]);
-    addRow(['TOTAL (inc VAT):', '', '', '', currencyPlain(total)], false, true);
-    
+    y -= 8;
+    addSummary('Total Discount Amount', currencyPlain(totalDiscountAmount));
+    addSummary('Subtotal (ex VAT)', currencyPlain(subtotal));
+    addSummary(`VAT (${vatPct}%)`, currencyPlain(vat));
+    addSummary('TOTAL (inc VAT)', currencyPlain(total), true);
+
     pages.push(cur);
-    const pdf = createSimplePdfFromPages(pages);
-    saveBlob('sacap_summary.pdf', pdf);
+    saveBlob('sacap_summary.pdf', createSimplePdfFromPages(pages));
   };
 
   return (

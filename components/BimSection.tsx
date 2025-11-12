@@ -4,7 +4,8 @@ import { useLocalStorageNumber, useLocalStorageState, useLocalStorageString } fr
 import { currency, currencyPlain } from '../utils/formatting';
 import { exportExcelTable, saveBlob } from '../utils/export';
 import { createSimplePdfFromPages, SIMPLE_PDF_PAGE } from '../services/pdfService';
-import { HOURS_PER_DAY, SCAN_M2_PER_DAY, MODEL_M2_PER_DAY, BIM_PRESETS, HOURLY_BIM_RATE } from '../constants';
+import { HOURS_PER_DAY, SCAN_M2_PER_DAY, MODEL_M2_PER_DAY, BIM_PRESETS, HOURLY_BIM_RATE, BRAND_COLORS } from '../constants';
+import { getProjectDetailsSnapshot, formatExportDate } from '../utils/projectDetails';
 
 interface BimSectionProps {
   clientName: string;
@@ -72,53 +73,137 @@ export function BimSection({ clientName, vatPct }: BimSectionProps) {
         ['Total', '', '', currencyPlain(totalHrs)],
       ];
     }
-    exportExcelTable('bim_summary.xls', headers, rows);
+    const projectDetails = getProjectDetailsSnapshot({ clientName });
+    const introRows = [...projectDetails.rows, ['Exported On', formatExportDate()]];
+    exportExcelTable('bim_summary.xls', headers, rows, { intro: { headers: ['Project Detail', 'Value'], rows: introRows } });
   };
   
   const handleExportPdf = () => {
+    const projectDetails = getProjectDetailsSnapshot({ clientName });
+    const detailRows = [...projectDetails.rows, ['Exported On', formatExportDate()]];
     const pages: PdfRun[][] = [];
+    const brand = BRAND_COLORS;
+    const margin = 48;
+    const width = SIMPLE_PDF_PAGE.width - margin * 2;
+    const tableWidth = width + 20;
+    const headerX = margin - 10;
+    const columnX = bimMethod === 'per_m2'
+      ? [margin, margin + 220, margin + 360, margin + 470]
+      : [margin, margin + 160, margin + 300, margin + 420];
     let cur: PdfRun[] = [];
-    let y = SIMPLE_PDF_PAGE.height - 40;
-    
-    const line = (txt: string, x: number, y: number, size = 10, bold = false): PdfRun => ({ text: txt, x, y, size, font: bold ? 'bold' : 'regular' });
-    
-    cur.push(line(`BIM Fee Summary - ${clientName || 'Untitled'}`, 40, y, 14, true)); y -= 20;
-    cur.push(line(`Method: ${bimMethod === 'per_m2' ? `Per m² (${bimArea} m²)` : 'Hourly'}`, 40, y, 10)); y -= 20;
+    let y = 0;
+
+    const rect = (x: number, top: number, w: number, h: number, fill?: [number, number, number], stroke?: [number, number, number], strokeWidth?: number) => {
+      cur.push({ kind: 'rect', x, y: top - h, width: w, height: h, fill, stroke, strokeWidth });
+    };
+    const text = (value: string, x: number, yPos: number, size = 10, bold = false, color = brand.charcoal) => {
+      cur.push({ text: value, x, y: yPos, size, font: bold ? 'bold' : 'regular', color });
+    };
+
+    const drawHeader = (withDetails: boolean) => {
+      const headerHeight = 70;
+      rect(headerX, y, tableWidth, headerHeight, brand.charcoal);
+      rect(headerX, y - headerHeight - 4, tableWidth, 4, brand.accent);
+      text('Fee Proposal', margin, y - 26, 18, true, brand.light);
+      text('BIM Fee Summary', margin, y - 44, 12, false, brand.light);
+      text(projectDetails.clientName || 'Unnamed Client', margin + width - 160, y - 28, 9, false, brand.light);
+      text(detailRows.at(-1)?.[1] ?? '', margin + width - 160, y - 42, 9, false, brand.light);
+      y -= headerHeight + 18;
+      if (withDetails) {
+        detailRows.forEach(([label, value]) => {
+          const rowHeight = 20;
+          rect(headerX, y, tableWidth, rowHeight, brand.light);
+          text(label, margin, y - 6, 9, true, brand.slate);
+          text(value, margin + width / 2, y - 6, 10, false, brand.charcoal);
+          y -= rowHeight;
+        });
+        y -= 10;
+      }
+    };
+
+    const startPage = (withDetails: boolean) => {
+      cur = [];
+      y = SIMPLE_PDF_PAGE.height - margin;
+      drawHeader(withDetails);
+    };
+
+    const checkBreak = (space = 60) => {
+      if (y < margin + space) {
+        pages.push(cur);
+        startPage(false);
+      }
+    };
+
+    const addRow = (cols: string[], opts?: { header?: boolean; bold?: boolean }) => {
+      checkBreak(opts?.header ? 90 : 60);
+      if (opts?.header) rect(headerX, y + 6, tableWidth, 18, brand.slate);
+      cols.forEach((val, idx) => {
+        text(val, columnX[idx], y, opts?.header ? 9 : 10, opts?.header || opts?.bold, opts?.header ? brand.light : brand.charcoal);
+      });
+      y -= opts?.header ? 18 : 16;
+    };
+
+    const addSummary = (label: string, value: string, highlight = false) => {
+      const rowHeight = 20;
+      checkBreak();
+      rect(headerX, y, tableWidth, rowHeight, highlight ? brand.accent : brand.light);
+      text(label, margin, y - 6, 10, true, highlight ? brand.charcoal : brand.slate);
+      text(value, margin + width - 80, y - 6, 10, true, brand.charcoal);
+      y -= rowHeight;
+    };
+
+    const addCards = () => {
+      const cards: [string, string][] = bimMethod === 'per_m2'
+        ? [
+            ['Method', 'Per m²'],
+            ['Gross Area', `${bimArea.toLocaleString('en-ZA')} m²`],
+            ['Preset', bimPreset === 'auto' ? 'Auto' : bimPreset],
+          ]
+        : [
+            ['Method', 'Hourly'],
+            ['Hourly Rate', currencyPlain(HOURLY_BIM_RATE)],
+            ['Total Hours', String(bimHrsScan + bimHrsReg + bimHrsModel)],
+          ];
+      const cardWidth = (width - 20) / cards.length;
+      checkBreak(140);
+      cards.forEach(([label, value], idx) => {
+        const cardX = margin + idx * (cardWidth + 10);
+        rect(cardX, y, cardWidth, 42, brand.light);
+        text(label, cardX + 6, y - 14, 9, true, brand.slate);
+        text(value, cardX + 6, y - 26, 12, true, brand.charcoal);
+      });
+      y -= 48;
+    };
+
+    startPage(true);
+    addCards();
+    addRow(
+      bimMethod === 'per_m2' ? ['Item', 'Rate', 'Area', 'Amount'] : ['Item', 'Hours', 'Rate', 'Amount'],
+      { header: true },
+    );
 
     if (bimMethod === 'per_m2') {
-        const colX = [40, 250];
-        const addRow = (label: string, value: string, isBold = false) => {
-            cur.push(line(label, colX[0], y, 10, isBold));
-            cur.push(line(value, colX[1], y, 10, isBold));
-            y -= 15;
-        };
-        addRow('Scanning', currencyPlain(scanAmount));
-        addRow('Registration', currencyPlain(regAmount));
-        addRow('Modelling', currencyPlain(modelAmount));
-        y -= 5;
-        addRow('Subtotal (ex VAT)', currencyPlain(subtotalBim), true);
-        addRow(`VAT (${vatPct}%)`, currencyPlain(vatBim));
-        addRow('TOTAL (inc VAT)', currencyPlain(totalBim), true);
+      addRow(['Scanning', currencyPlain(bimRates.scan), `${bimArea.toLocaleString('en-ZA')} m²`, currencyPlain(scanAmount)]);
+      addRow(['Registration', currencyPlain(bimRates.reg), `${bimArea.toLocaleString('en-ZA')} m²`, currencyPlain(regAmount)]);
+      addRow(['Modelling', currencyPlain(bimRates.model), `${bimArea.toLocaleString('en-ZA')} m²`, currencyPlain(modelAmount)]);
+      y -= 8;
+      addSummary('Subtotal (ex VAT)', currencyPlain(subtotalBim));
+      addSummary(`VAT (${vatPct}%)`, currencyPlain(vatBim));
+      addSummary('TOTAL (inc VAT)', currencyPlain(totalBim), true);
     } else {
-        const colX = [40, 200, 300, 400];
-        const addRow = (cols: string[], isHeader = false, isBold = false) => {
-            cols.forEach((text, i) => cur.push(line(text, colX[i], y, isHeader ? 9 : 10, isHeader || isBold)));
-            y -= (isHeader ? 12 : 15);
-        };
-        addRow(['Item', 'Hours', 'Rate', 'Amount'], true);
-        y -= 2;
-        addRow(['Scanning', String(bimHrsScan), currencyPlain(HOURLY_BIM_RATE), currencyPlain(bimHrsScan * HOURLY_BIM_RATE)]);
-        addRow(['Registration', String(bimHrsReg), currencyPlain(HOURLY_BIM_RATE), currencyPlain(bimHrsReg * HOURLY_BIM_RATE)]);
-        addRow(['Modelling', String(bimHrsModel), currencyPlain(HOURLY_BIM_RATE), currencyPlain(bimHrsModel * HOURLY_BIM_RATE)]);
-        y -= 5;
-        addRow(['Subtotal (ex VAT)', '', '', currencyPlain(subtotalHrs)], false, true);
-        addRow([`VAT (${vatPct}%)`, '', '', currencyPlain(vatHrs)]);
-        addRow(['TOTAL (inc VAT)', '', '', currencyPlain(totalHrs)], false, true);
+      addRow(['Scanning', String(bimHrsScan), currencyPlain(HOURLY_BIM_RATE), currencyPlain(bimHrsScan * HOURLY_BIM_RATE)]);
+      addRow(['Registration', String(bimHrsReg), currencyPlain(HOURLY_BIM_RATE), currencyPlain(bimHrsReg * HOURLY_BIM_RATE)]);
+      addRow(['Modelling', String(bimHrsModel), currencyPlain(HOURLY_BIM_RATE), currencyPlain(bimHrsModel * HOURLY_BIM_RATE)]);
+      y -= 8;
+      addSummary('Subtotal (ex VAT)', currencyPlain(subtotalHrs));
+      addSummary(`VAT (${vatPct}%)`, currencyPlain(vatHrs));
+      addSummary('TOTAL (inc VAT)', currencyPlain(totalHrs), true);
     }
 
     pages.push(cur);
     saveBlob('bim_summary.pdf', createSimplePdfFromPages(pages));
   };
+
 
 
   return (

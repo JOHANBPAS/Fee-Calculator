@@ -1,5 +1,29 @@
 import type { AecomRateItem, AecomRateGroup, ResultRowDef, RoleKey } from './types';
 
+const hexToRgb = (hex: string): [number, number, number] => {
+  const normalized = hex.replace('#', '');
+  if (normalized.length !== 6) return [0, 0, 0];
+  const num = Number.parseInt(normalized, 16);
+  if (Number.isNaN(num)) return [0, 0, 0];
+  return [
+    ((num >> 16) & 255) / 255,
+    ((num >> 8) & 255) / 255,
+    (num & 255) / 255,
+  ];
+};
+
+export const BRAND_COLORS = {
+  charcoal: hexToRgb('#212121'),
+  slate: hexToRgb('#5a6061'),
+  light: hexToRgb('#eff2f7'),
+  accent: hexToRgb('#eba000'),
+};
+
+export const BRAND_FONTS = {
+  primary: 'Syne',
+  secondary: 'Raleway',
+};
+
 // BIM constants
 export const HOURS_PER_DAY = 8;
 export const SCAN_M2_PER_DAY = 850;
