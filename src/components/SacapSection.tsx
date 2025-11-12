@@ -25,6 +25,11 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
   const [complexity, setComplexity] = useLocalStorageString('sacapComplexity', 'low') as [SacapComplexity, (v: SacapComplexity) => void];
   const [stages, setStages] = useLocalStorageState<SacapStage[]>('sacapStages', defaults);
   const [overallDiscountPct, setOverallDiscountPct] = useLocalStorageNumber('sacapOverallDiscountPct', 0);
+  const handleOverallDiscountChange = (value: number) => {
+    if (Number.isNaN(value)) return;
+    const clamped = Math.min(100, Math.max(0, value));
+    setOverallDiscountPct(clamped);
+  };
 
   const aecomOptions = useMemo(() => AECOM_RATES.flatMap(g => g.items.filter(i => i.unit === 'm2').map(i => ({ ...i, group: g.group }))), []);
   const [aecomKey, setAecomKey] = useLocalStorageString('sacapAecomKey', aecomOptions[0]?.key || '');
@@ -154,8 +159,27 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
           <div className='text-xs text-zinc-400 mt-1'>Base fee (auto): {currency(baseFee)}</div>
         </div>
         <div>
-          <div className='text-sm mb-1'>Overall discount (%)</div>
-          <input type='number' min={0} max={100} className='w-full bg-zinc-800 rounded-xl p-2' value={overallDiscountPct} onChange={(e) => setOverallDiscountPct(Number(e.target.value))} />
+          <div className='flex items-center justify-between text-sm mb-1'>
+            <span>Overall discount (%)</span>
+            <span className='text-xs text-zinc-400'>{overallDiscountPct.toFixed(0)}%</span>
+          </div>
+          <input
+            type='number'
+            min={0}
+            max={100}
+            className='w-full bg-zinc-800 rounded-xl p-2 mb-2'
+            value={overallDiscountPct}
+            onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
+          />
+          <input
+            type='range'
+            min={0}
+            max={100}
+            step={1}
+            value={overallDiscountPct}
+            onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
+            className='w-full accent-amber-400'
+          />
         </div>
       </div>
 
