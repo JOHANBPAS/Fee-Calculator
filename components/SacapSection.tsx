@@ -39,6 +39,11 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
   const selectedAecom = aecomOptions.find(item => item.key === aecomKey) ?? aecomOptions[0];
   const aecomRate = selectedAecom ? (aecomRateChoice === 'min' ? selectedAecom.min : aecomRateChoice === 'max' ? selectedAecom.max : defaultRate(selectedAecom)) : 0;
   const aecomEstimate = selectedAecom ? Math.max(0, Math.round(aecomRate * Math.max(0, aecomSize || 0))) : 0;
+  const complexityLabel = complexity === 'low' ? 'Low Complexity' : complexity === 'medium' ? 'Medium Complexity' : 'High Complexity';
+  const buildingCategory = selectedAecom?.group ?? 'Custom selection';
+  const buildingTypeLabel = selectedAecom?.label ?? 'Manual entry';
+  const buildingSizeLabel = aecomSize > 0 ? `${aecomSize.toLocaleString('en-ZA')} m²` : 'Not specified';
+  const exportedOn = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 
   const baseFee = useMemo(() => {
     const table = complexity === 'low' ? ARC_LOW : complexity === 'medium' ? ARC_MED : ARC_HIGH;
@@ -75,6 +80,13 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
       currencyPlain(r.override),
       currencyPlain(r.amount),
     ]);
+    const projectDetailsRows = [
+      ['Building Category', buildingCategory],
+      ['Building Type', buildingTypeLabel],
+      ['Building Size', buildingSizeLabel],
+      ['Project Complexity', complexityLabel],
+      ['Exported On', exportedOn],
+    ];
     excelRows.push([]); // spacer
     excelRows.push(['Summary', 'Value of Works', '', '', currencyPlain(vow)]);
     excelRows.push(['Summary', 'Base Fee', '', '', currencyPlain(baseFee)]);
@@ -83,7 +95,7 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
     excelRows.push(['Summary', `VAT (${vatPct}%)`, '', '', currencyPlain(vat)]);
     excelRows.push(['Summary', 'TOTAL (inc VAT)', '', '', currencyPlain(total)]);
     excelRows.push(['Summary', 'Overall discount (%)', `${overallDiscountPct}%`, '', '']);
-    exportExcelTable('sacap.xls', headers, excelRows);
+    exportExcelTable('sacap.xls', headers, excelRows, { intro: { headers: ['Project Detail', 'Value'], rows: projectDetailsRows } });
   };
 
   const handleExportPdf = () => {
@@ -104,6 +116,24 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
     cur.push(line('SACAP Fee Summary', 40, y, 14, true)); y -= 20;
     cur.push(line(`Value of Works: ${currencyPlain(vow)}`, 40, y, 10)); y -= 15;
     cur.push(line(`Base Fee: ${currencyPlain(baseFee)}`, 40, y, 10)); y-= 20;
+
+    const addDetailPair = (label: string, value: string) => {
+        checkPageBreak();
+        cur.push(line(label, 40, y, 10, true));
+        cur.push(line(value, 220, y, 10));
+        y -= 14;
+    };
+
+    cur.push(line('Project Details', 40, y, 12, true)); y -= 16;
+    [
+        ['Building Category', buildingCategory],
+        ['Building Type', buildingTypeLabel],
+        ['Building Size', buildingSizeLabel],
+        ['Project Complexity', complexityLabel],
+        ['Exported On', exportedOn],
+    ].forEach(([label, value]) => addDetailPair(label, value));
+    y -= 6;
+    cur.push(line('Fee Apportionment Summary', 40, y, 12, true)); y -= 18;
 
     const colX = [40, 250, 320, 400, 480];
     const addRow = (cols: string[], isHeader = false, isBold = false) => {
