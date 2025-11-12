@@ -85,11 +85,11 @@ export function BimSection({ clientName, vatPct }: BimSectionProps) {
     const brand = BRAND_COLORS;
     const margin = 48;
     const width = SIMPLE_PDF_PAGE.width - margin * 2;
-    const tableWidth = width + 20;
-    const headerX = margin - 10;
+    const tableWidth = width;
+    const headerX = margin;
     const columnX = bimMethod === 'per_m2'
-      ? [margin, margin + 220, margin + 360, margin + 470]
-      : [margin, margin + 160, margin + 300, margin + 420];
+      ? [margin, margin + 200, margin + 320, margin + 430]
+      : [margin, margin + 170, margin + 300, margin + 420];
     let cur: PdfRun[] = [];
     let y = 0;
 

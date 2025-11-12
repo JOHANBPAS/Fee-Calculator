@@ -114,9 +114,9 @@ export function HourlySection({ vatPct }: HourlySectionProps) {
         const brand = BRAND_COLORS;
         const margin = 48;
         const width = SIMPLE_PDF_PAGE.width - margin * 2;
-        const tableWidth = width + 20;
-        const headerX = margin - 10;
-        const colX = [margin, margin + 200, margin + 320, margin + 430];
+        const tableWidth = width;
+        const headerX = margin;
+        const colX = [margin, margin + 190, margin + 315, margin + 430];
         let cur: PdfRun[] = [];
         let y = 0;
 

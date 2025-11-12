@@ -176,9 +176,9 @@ export function BasketSection({ globalVow, onVowChange, vatPct, clientName }: Ba
     const brand = BRAND_COLORS;
     const margin = 48;
     const width = SIMPLE_PDF_PAGE.width - margin * 2;
-    const tableWidth = width + 20;
-    const headerX = margin - 10;
-    const columnX = [margin, margin + 190, margin + 305, margin + 400, margin + 500];
+    const tableWidth = width;
+    const headerX = margin;
+    const columnX = [margin, margin + 170, margin + 285, margin + 380, margin + 470];
     let cur: PdfRun[] = [];
     let y = 0;
 

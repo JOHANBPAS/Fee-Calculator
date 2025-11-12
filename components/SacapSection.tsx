@@ -96,9 +96,9 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
     const brand = BRAND_COLORS;
     const margin = 48;
     const width = SIMPLE_PDF_PAGE.width - margin * 2;
-    const tableWidth = width + 20;
-    const headerX = margin - 10;
-    const colX = [margin, margin + 190, margin + 280, margin + 370, margin + 480];
+    const tableWidth = width;
+    const headerX = margin;
+    const colX = [margin, margin + 160, margin + 260, margin + 360, margin + 450];
     let cur: PdfRun[] = [];
     let y = 0;
 
