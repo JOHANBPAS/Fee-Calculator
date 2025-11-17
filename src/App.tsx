@@ -8,6 +8,7 @@ import { GuidelineSettings } from './components/GuidelineSettings';
 import { SupabaseAuthProvider } from './providers/SupabaseAuthProvider';
 import { AuthGate } from './components/AuthGate';
 import { ProjectSyncPanel } from './components/ProjectSyncPanel';
+import { ProjectsList } from './components/ProjectsList';
 
 type Tab = 'basket' | 'sacap' | 'bim' | 'hourly';
 
@@ -16,6 +17,7 @@ function App() {
   const [vatPct, setVatPct] = useLocalStorageNumber('vatPct', 15);
   const [activeTab, setActiveTab] = useLocalStorageString('activeTab', 'basket') as [Tab, (t: Tab) => void];
   const [globalVow, setGlobalVow] = useState(0);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'basket', label: 'Basket of Fees' },
@@ -29,6 +31,7 @@ function App() {
       <AuthGate>
         <div className='bg-zinc-950 text-white min-h-screen font-sans'>
           <main className='max-w-4xl mx-auto p-4 space-y-6'>
+            <ProjectsList onSelectProject={(id) => setSelectedProjectId(id)} />
             <ProjectSyncPanel
               clientName={clientName}
               setClientName={setClientName}
@@ -38,6 +41,8 @@ function App() {
               setGlobalVow={setGlobalVow}
               activeTab={activeTab}
               setActiveTab={(tab) => setActiveTab(tab as Tab)}
+              selectedProjectId={selectedProjectId}
+              onProjectSelected={(id) => setSelectedProjectId(id)}
             />
 
             <header className='space-y-4'>

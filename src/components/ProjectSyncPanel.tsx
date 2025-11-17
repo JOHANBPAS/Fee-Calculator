@@ -3,7 +3,7 @@ import { useSupabaseAuth } from '../providers/SupabaseAuthProvider';
 import { applySnapshotToApp, buildFeeSnapshot } from '../utils/feeSnapshot';
 import {
   createProject,
-  listProjects,
+  listProjectsForUser,
   loadLatestCalculation,
   saveCalculation,
   upsertProfile,
@@ -20,6 +20,8 @@ interface ProjectSyncPanelProps {
   setGlobalVow: (val: number) => void;
   activeTab: string;
   setActiveTab: (val: string) => void;
+  selectedProjectId?: string;
+  onProjectSelected?: (id: string) => void;
 }
 
 interface FeeProjectRow {
@@ -28,6 +30,7 @@ interface FeeProjectRow {
   client_name?: string;
   site_address?: string;
   value_of_works?: number;
+  isOwner: boolean;
 }
 
 export function ProjectSyncPanel(props: ProjectSyncPanelProps) {
@@ -55,7 +58,7 @@ export function ProjectSyncPanel(props: ProjectSyncPanelProps) {
     (async () => {
       try {
         await upsertProfile(user.id, user.email);
-        const rows = await listProjects();
+        const rows = await listProjectsForUser(user.id);
         setProjects(rows as FeeProjectRow[]);
         const timestamps = await fetchLatestTimestampsByProject();
         setLastSavedByProject(timestamps);
@@ -65,6 +68,12 @@ export function ProjectSyncPanel(props: ProjectSyncPanelProps) {
       }
     })();
   }, [user]);
+
+  useEffect(() => {
+    if (props.selectedProjectId) {
+      setSelectedProjectId(props.selectedProjectId);
+    }
+  }, [props.selectedProjectId]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,7 +202,10 @@ export function ProjectSyncPanel(props: ProjectSyncPanelProps) {
         <select
           className="bg-zinc-800 rounded-xl p-2 min-w-[200px]"
           value={selectedProjectId}
-          onChange={(e) => setSelectedProjectId(e.target.value)}
+          onChange={(e) => {
+            setSelectedProjectId(e.target.value);
+            props.onProjectSelected?.(e.target.value);
+          }}
         >
           <option value="">Select project</option>
           {projects.map((p) => (

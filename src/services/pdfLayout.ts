@@ -110,7 +110,7 @@ export function drawTextInColumn(doc: PdfDoc, text: string, column: ColumnDef, o
 }
 
 // Draw a heading (always bold, within the safe area).
-export function drawHeading(doc: PdfDoc, text: string, size = 14, color: [number, number, number] = [0.96, 0.76, 0.27]) {
+export function drawHeading(doc: PdfDoc, text: string, size = 14, color: [number, number, number] = [0.922, 0.627, 0.0]) {
   const lineHeight = size + 4;
   ensureSpace(doc, lineHeight);
   doc.current.push({ text, x: MARGIN_LEFT, y: doc.cursorY - lineHeight, size, color, font: 'bold' });
