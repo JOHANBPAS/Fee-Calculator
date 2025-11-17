@@ -91,9 +91,9 @@ export function ProjectSyncPanel(props: ProjectSyncPanelProps) {
       setSelectedProjectId((row as FeeProjectRow).id);
       setProjectForm({ name: '', client_name: '', site_address: '' });
       setMessage('Project created.');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setMessage('Failed to create project.');
+      setMessage(`Failed to create project: ${err?.message || 'unknown error'}`);
     } finally {
       setLoading(false);
     }
