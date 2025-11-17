@@ -38,9 +38,9 @@ export function ProjectsList({ onSelectProject }: ProjectsListProps) {
       try {
         const rows = await listProjectsForUser(user.id);
         setProjects(rows);
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        setError('Could not load projects.');
+        setError(`Could not load projects: ${err?.message || 'unknown error'}`);
       } finally {
         setLoading(false);
       }

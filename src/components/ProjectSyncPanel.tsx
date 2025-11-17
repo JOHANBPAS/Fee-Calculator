@@ -62,9 +62,9 @@ export function ProjectSyncPanel(props: ProjectSyncPanelProps) {
         setProjects(rows as FeeProjectRow[]);
         const timestamps = await fetchLatestTimestampsByProject();
         setLastSavedByProject(timestamps);
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
-        setMessage('Could not load projects from Supabase.');
+        setMessage(`Could not load projects from Supabase: ${err?.message || 'unknown error'}`);
       }
     })();
   }, [user]);
