@@ -70,9 +70,9 @@ export function ProjectsList({ onSelectProject }: ProjectsListProps) {
     try {
       const rows = await listProjectShares(projectId);
       setShares((prev) => ({ ...prev, [projectId]: rows }));
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('Could not load shared users.');
+      setError(`Could not load shared users: ${err?.message || 'unknown error'}`);
     }
   };
 
