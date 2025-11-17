@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import type { RoleKey, HourlyPhase, PdfRun } from '../types';
+import type { RoleKey, HourlyPhase } from '../types';
 import { useLocalStorageState, useLocalStorageString } from '../hooks/useLocalStorage';
 import { currency, currencyPlain } from '../utils/formatting';
 import { exportExcelTable, saveBlob } from '../utils/export';
-import { createSimplePdfFromPages, SIMPLE_PDF_PAGE } from '../services/pdfService';
+import { createSimplePdfFromPages } from '../services/pdfService';
+import { createPdfDoc, drawHeading, drawKeyValue, drawTableRows, drawTextInColumn, finishDoc, CONTENT_WIDTH, MARGIN_LEFT } from '../services/pdfLayout';
 import { ROLE_LABEL, BRAND_COLORS } from '../constants';
 import { getProjectDetailsSnapshot, formatExportDate } from '../utils/projectDetails';
 
@@ -110,125 +111,72 @@ export function HourlySection({ vatPct }: HourlySectionProps) {
         const projectDetails = getProjectDetailsSnapshot();
         const detailRows = [...projectDetails.rows, ['Hourly Project Name', projectName || 'Untitled'], ['Exported On', formatExportDate()]];
 
-        const pages: PdfRun[][] = [];
-        const brand = BRAND_COLORS;
-        const margin = 48;
-        const width = SIMPLE_PDF_PAGE.width - margin * 2;
-        const tableWidth = width;
-        const headerX = margin;
-        const colX = [margin, margin + 190, margin + 315, margin + 430];
-        let cur: PdfRun[] = [];
-        let y = 0;
+        const doc = createPdfDoc();
+        const { columns } = doc;
 
-        const rect = (x: number, top: number, w: number, h: number, fill?: [number, number, number], stroke?: [number, number, number], strokeWidth?: number) => {
-            cur.push({ kind: 'rect', x, y: top - h, width: w, height: h, fill, stroke, strokeWidth });
-        };
-        const text = (value: string, x: number, yPos: number, size = 10, bold = false, color = brand.charcoal) => {
-            cur.push({ text: value, x, y: yPos, size, font: bold ? 'bold' : 'regular', color });
-        };
+        drawHeading(doc, 'Fee Proposal');
+        drawHeading(doc, 'Hourly Services', 12, BRAND_COLORS.accent);
+        detailRows.forEach(([label, value]) => drawKeyValue(doc, label, value, { size: 11, lineHeight: 15 }));
+        doc.cursorY -= 8;
 
-        const drawHeader = (withDetails: boolean) => {
-            const headerHeight = 70;
-            rect(headerX, y, tableWidth, headerHeight, brand.charcoal);
-            rect(headerX, y - headerHeight - 4, tableWidth, 4, brand.accent);
-            text('Fee Proposal', margin, y - 26, 18, true, brand.light);
-            text('Hourly Services', margin, y - 44, 12, false, brand.light);
-            text(projectDetails.clientName || 'Unnamed Client', margin + width - 160, y - 28, 9, false, brand.light);
-            text(detailRows.at(-1)?.[1] ?? '', margin + width - 160, y - 42, 9, false, brand.light);
-            y -= headerHeight + 18;
-            if (withDetails) {
-                detailRows.forEach(([label, value]) => {
-                    const rowHeight = 20;
-                    rect(headerX, y, tableWidth, rowHeight, brand.light);
-                    text(label, margin, y - 6, 9, true, brand.slate);
-                    text(value, margin + width / 2, y - 6, 10, false, brand.charcoal);
-                    y -= rowHeight;
-                });
-                y -= 10;
-            }
-        };
+        // Totals card-equivalents as key/value rows
+        drawKeyValue(doc, 'Subtotal (ex VAT)', currencyPlain(subtotal));
+        drawKeyValue(doc, `VAT (${vatPct}%)`, currencyPlain(vat));
+        drawKeyValue(doc, 'Total (inc VAT)', currencyPlain(total));
+        doc.cursorY -= 6;
 
-        const startPage = (withDetails: boolean) => {
-            cur = [];
-            y = SIMPLE_PDF_PAGE.height - margin;
-            drawHeader(withDetails);
-        };
+        const tableCols = [
+            columns.label,
+            { x: MARGIN_LEFT + CONTENT_WIDTH * 0.45 + 8, width: CONTENT_WIDTH * 0.2, align: 'left' as const },
+            { x: MARGIN_LEFT + CONTENT_WIDTH * 0.65 + 12, width: CONTENT_WIDTH * 0.15, align: 'left' as const },
+            { x: MARGIN_LEFT + CONTENT_WIDTH * 0.8 + 16, width: CONTENT_WIDTH * 0.2 - 16, align: 'right' as const },
+        ];
 
-        const checkBreak = (space = 60) => {
-            if (y < margin + space) {
-                pages.push(cur);
-                startPage(false);
-            }
-        };
-
-        const addRow = (cols: string[], opts?: { header?: boolean; bold?: boolean }) => {
-            checkBreak(opts?.header ? 90 : 60);
-            if (opts?.header) rect(headerX, y + 6, tableWidth, 18, brand.slate);
-            cols.forEach((val, idx) => {
-                text(val, colX[idx], y, opts?.header ? 9 : 10, opts?.header || opts?.bold, opts?.header ? brand.light : brand.charcoal);
-            });
-            y -= opts?.header ? 18 : 16;
-        };
-
-        const addSummary = (label: string, value: string, highlight = false) => {
-            const rowHeight = 20;
-            checkBreak();
-            rect(headerX, y, tableWidth, rowHeight, highlight ? brand.accent : brand.light);
-            text(label, margin, y - 6, 10, true, highlight ? brand.charcoal : brand.slate);
-            text(value, margin + width - 80, y - 6, 10, true, brand.charcoal);
-            y -= rowHeight;
-        };
-
-        const addCards = () => {
-            const cards: [string, string][] = [
-                ['Subtotal (ex VAT)', currencyPlain(subtotal)],
-                [`VAT (${vatPct}%)`, currencyPlain(vat)],
-                ['Total (inc VAT)', currencyPlain(total)],
-            ];
-            const cardWidth = (width - 20) / cards.length;
-            checkBreak(140);
-            cards.forEach(([label, value], idx) => {
-                const cardX = margin + idx * (cardWidth + 10);
-                rect(cardX, y, cardWidth, 42, brand.light);
-                text(label, cardX + 6, y - 14, 9, true, brand.slate);
-                text(value, cardX + 6, y - 26, 12, true, brand.charcoal);
-            });
-            y -= 48;
-        };
-
-        startPage(true);
-        addCards();
+        drawTableRows(
+            doc,
+            [
+                [
+                    { text: 'Role', column: tableCols[0], size: 11, color: BRAND_COLORS.light },
+                    { text: 'Rate', column: tableCols[1], size: 11, color: BRAND_COLORS.light },
+                    { text: 'Hours', column: tableCols[2], size: 11, color: BRAND_COLORS.light },
+                    { text: 'Amount', column: tableCols[3], size: 11, color: BRAND_COLORS.light },
+                ],
+            ],
+            16,
+        );
 
         storedPhases.forEach(p => {
             const relevantHours = (Object.keys(p.hours) as RoleKey[]).filter(rk => (p.hours[rk] || 0) > 0);
             if (relevantHours.length === 0) return;
 
-            checkBreak();
-            y -= 4;
-            text(p.name, margin, y, 11, true, brand.slate);
-            y -= 16;
-            addRow(['Role', 'Rate', 'Hours', 'Amount'], { header: true });
-
-            let phaseTotal = 0;
-            relevantHours.forEach(rk => {
+            drawHeading(doc, p.name, 11, BRAND_COLORS.slate);
+            const phaseTotal = relevantHours.reduce((sum, rk) => sum + (p.hours[rk] || 0) * (rates[rk] || 0), 0);
+            const rows = relevantHours.map(rk => {
                 const hrs = p.hours[rk] || 0;
                 const rate = rates[rk] || 0;
                 const amount = hrs * rate;
-                phaseTotal += amount;
-                addRow([ROLE_LABEL[rk], currencyPlain(rate), String(hrs), currencyPlain(amount)]);
+                return [
+                    { text: ROLE_LABEL[rk], column: tableCols[0] },
+                    { text: currencyPlain(rate), column: tableCols[1] },
+                    { text: String(hrs), column: tableCols[2] },
+                    { text: currencyPlain(amount), column: tableCols[3] },
+                ];
             });
-            y -= 4;
-            addSummary(`${p.name} Total`, currencyPlain(phaseTotal));
-            y -= 8;
+            drawTableRows(doc, rows, 16);
+
+            drawTextInColumn(doc, `${p.name} Total`, columns.label, { size: 11, lineHeight: 16, color: BRAND_COLORS.slate });
+            drawTextInColumn(doc, currencyPlain(phaseTotal), columns.value, { size: 11, lineHeight: 16, color: BRAND_COLORS.charcoal });
+            doc.cursorY -= 8;
         });
 
-        y -= 6;
-        addSummary('GRAND TOTAL (ex VAT)', currencyPlain(subtotal));
-        addSummary(`VAT (${vatPct}%)`, currencyPlain(vat));
-        addSummary('GRAND TOTAL (inc VAT)', currencyPlain(total), true);
+        drawTextInColumn(doc, 'GRAND TOTAL (ex VAT)', columns.label, { size: 11, lineHeight: 16, color: BRAND_COLORS.slate });
+        drawTextInColumn(doc, currencyPlain(subtotal), columns.value, { size: 11, lineHeight: 16, color: BRAND_COLORS.charcoal });
+        drawTextInColumn(doc, `VAT (${vatPct}%)`, columns.label, { size: 11, lineHeight: 16, color: BRAND_COLORS.slate });
+        drawTextInColumn(doc, currencyPlain(vat), columns.value, { size: 11, lineHeight: 16, color: BRAND_COLORS.charcoal });
+        drawTextInColumn(doc, 'GRAND TOTAL (inc VAT)', columns.label, { size: 11, lineHeight: 16, color: BRAND_COLORS.slate });
+        drawTextInColumn(doc, currencyPlain(total), columns.value, { size: 11, lineHeight: 16, color: BRAND_COLORS.charcoal });
 
-        pages.push(cur);
-        saveBlob('hourly_summary.pdf', createSimplePdfFromPages(pages));
+        saveBlob('hourly_summary.pdf', createSimplePdfFromPages(finishDoc(doc)));
     };
 
     return (

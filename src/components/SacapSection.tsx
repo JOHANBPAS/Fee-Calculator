@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
-import type { SacapStage, SacapComplexity, PdfRun } from '../types';
+import type { SacapStage, SacapComplexity } from '../types';
 import { useLocalStorageNumber, useLocalStorageState, useLocalStorageString } from '../hooks/useLocalStorage';
 import { currency, currencyPlain } from '../utils/formatting';
 import { exportExcelTable, saveBlob } from '../utils/export';
-import { createSimplePdfFromPages, SIMPLE_PDF_PAGE } from '../services/pdfService';
+import { createSimplePdfFromPages } from '../services/pdfService';
+import { createPdfDoc, drawHeading, drawKeyValue, drawTableRows, drawTextInColumn, finishDoc, CONTENT_WIDTH, MARGIN_LEFT } from '../services/pdfLayout';
 import { AECOM_RATES, defaultRate, ARC_LOW, ARC_MED, ARC_HIGH, BRAND_COLORS } from '../constants';
 import { getProjectDetailsSnapshot, formatExportDate } from '../utils/projectDetails';
 
@@ -91,117 +92,68 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
   };
 
   const handleExportPdf = () => {
-    const detailRows = [...projectDetailRows];
-    const pages: PdfRun[][] = [];
-    const brand = BRAND_COLORS;
-    const margin = 48;
-    const width = SIMPLE_PDF_PAGE.width - margin * 2;
-    const tableWidth = width;
-    const headerX = margin;
-    const colX = [margin, margin + 160, margin + 260, margin + 360, margin + 450];
-    let cur: PdfRun[] = [];
-    let y = 0;
+    const doc = createPdfDoc();
+    const { columns } = doc;
+    drawHeading(doc, 'Fee Proposal');
+    drawHeading(doc, 'SACAP Fee Generator', 12, BRAND_COLORS.accent);
+    projectDetailRows.forEach(([label, value]) => drawKeyValue(doc, label, value, { size: 11, lineHeight: 15 }));
+    doc.cursorY -= 6;
 
-    const rect = (x: number, top: number, w: number, h: number, fill?: [number, number, number], stroke?: [number, number, number], strokeWidth?: number) => {
-      cur.push({ kind: 'rect', x, y: top - h, width: w, height: h, fill, stroke, strokeWidth });
-    };
-    const text = (value: string, x: number, yPos: number, size = 10, bold = false, color = brand.charcoal) => {
-      cur.push({ text: value, x, y: yPos, size, font: bold ? 'bold' : 'regular', color });
-    };
+    const infoRows: { label: string; value: string }[] = [
+      { label: 'Value of Works', value: currencyPlain(vow) },
+      { label: 'Base Fee', value: currencyPlain(baseFee) },
+      { label: 'Overall Discount', value: `${overallDiscountPct}%` },
+    ];
+    infoRows.forEach((r) => drawKeyValue(doc, r.label, r.value, { size: 11, lineHeight: 15 }));
+    doc.cursorY -= 6;
 
-    const drawHeader = (withDetails: boolean) => {
-      const headerHeight = 70;
-      rect(headerX, y, tableWidth, headerHeight, brand.charcoal);
-      rect(headerX, y - headerHeight - 4, tableWidth, 4, brand.accent);
-      text('Fee Proposal', margin, y - 26, 18, true, brand.light);
-      text('SACAP Fee Generator', margin, y - 44, 12, false, brand.light);
-      text(projectDetails.clientName || 'Unnamed Client', margin + width - 160, y - 28, 9, false, brand.light);
-      text(detailRows.at(-1)?.[1] ?? '', margin + width - 160, y - 42, 9, false, brand.light);
-      y -= headerHeight + 18;
-      if (withDetails) {
-        detailRows.forEach(([label, value]) => {
-          const rowHeight = 20;
-          rect(headerX, y, tableWidth, rowHeight, brand.light);
-          text(label, margin, y - 6, 9, true, brand.slate);
-          text(value, margin + width / 2, y - 6, 10, false, brand.charcoal);
-          y -= rowHeight;
-        });
-        y -= 10;
-      }
-    };
+    drawHeading(doc, 'Fee Apportionment Summary', 12, BRAND_COLORS.slate);
 
-    const startPage = (withDetails: boolean) => {
-      cur = [];
-      y = SIMPLE_PDF_PAGE.height - margin;
-      drawHeader(withDetails);
-    };
+    const stageCols = [
+      columns.label,
+      { x: MARGIN_LEFT + CONTENT_WIDTH * 0.45 + 8, width: CONTENT_WIDTH * 0.12, align: 'left' as const },
+      { x: MARGIN_LEFT + CONTENT_WIDTH * 0.57 + 10, width: CONTENT_WIDTH * 0.12, align: 'left' as const },
+      { x: MARGIN_LEFT + CONTENT_WIDTH * 0.69 + 12, width: CONTENT_WIDTH * 0.14, align: 'left' as const },
+      { x: MARGIN_LEFT + CONTENT_WIDTH * 0.83 + 14, width: CONTENT_WIDTH * 0.17 - 14, align: 'right' as const },
+    ];
 
-    const checkBreak = (space = 60) => {
-      if (y < margin + space) {
-        pages.push(cur);
-        startPage(false);
-      }
-    };
+    drawTableRows(
+      doc,
+      [
+        [
+          { text: 'Stage', column: stageCols[0], size: 11, color: BRAND_COLORS.light },
+          { text: '% of Base', column: stageCols[1], size: 11, color: BRAND_COLORS.light },
+          { text: 'Discount %', column: stageCols[2], size: 11, color: BRAND_COLORS.light },
+          { text: 'Override', column: stageCols[3], size: 11, color: BRAND_COLORS.light },
+          { text: 'Amount', column: stageCols[4], size: 11, color: BRAND_COLORS.light },
+        ],
+      ],
+      16,
+    );
 
-    const addRow = (cols: string[], opts?: { header?: boolean; bold?: boolean }) => {
-      checkBreak(opts?.header ? 90 : 60);
-      if (opts?.header) rect(headerX, y + 6, tableWidth, 18, brand.slate);
-      cols.forEach((val, idx) => {
-        text(val, colX[idx], y, opts?.header ? 9 : 10, opts?.header || opts?.bold, opts?.header ? brand.light : brand.charcoal);
-      });
-      y -= opts?.header ? 18 : 16;
-    };
+    const rows = enabledRows.map((r) => [
+      { text: r.name, column: stageCols[0] },
+      { text: `${r.pct}%`, column: stageCols[1] },
+      { text: `${r.discountPct || 0}%`, column: stageCols[2] },
+      { text: currencyPlain(r.override), column: stageCols[3] },
+      { text: currencyPlain(r.amount), column: stageCols[4] },
+    ]);
+    drawTableRows(doc, rows, 16);
+    doc.cursorY -= 8;
 
-    const addCards = () => {
-      const cards: [string, string][] = [
-        ['Value of Works', currencyPlain(vow)],
-        ['Base Fee', currencyPlain(baseFee)],
-        ['Overall Discount', `${overallDiscountPct}%`],
-      ];
-      const cardWidth = (width - 20) / cards.length;
-      checkBreak(140);
-      cards.forEach(([label, value], idx) => {
-        const cardX = margin + idx * (cardWidth + 10);
-        rect(cardX, y, cardWidth, 42, brand.light);
-        text(label, cardX + 6, y - 14, 9, true, brand.slate);
-        text(value, cardX + 6, y - 26, 12, true, brand.charcoal);
-      });
-      y -= 48;
-    };
-
-    const addSummary = (label: string, value: string, highlight = false) => {
-      const rowHeight = 20;
-      checkBreak();
-      rect(headerX, y, tableWidth, rowHeight, highlight ? brand.accent : brand.light);
-      text(label, margin, y - 6, 10, true, highlight ? brand.charcoal : brand.slate);
-      text(value, margin + width - 80, y - 6, 10, true, brand.charcoal);
-      y -= rowHeight;
-    };
-
-    startPage(true);
-    addCards();
-    text('Fee Apportionment Summary', margin, y, 12, true, brand.slate);
-    y -= 18;
-    addRow(['Stage', '% of Base', 'Discount %', 'Override', 'Amount'], { header: true });
-
-    enabledRows.forEach((r) => {
-      addRow([
-        r.name,
-        `${r.pct}%`,
-        `${r.discountPct || 0}%`,
-        currencyPlain(r.override),
-        currencyPlain(r.amount),
-      ]);
+    const totals = [
+      { label: 'Total Discount Amount', value: currencyPlain(totalDiscountAmount) },
+      { label: 'Subtotal (ex VAT)', value: currencyPlain(subtotal) },
+      { label: `VAT (${vatPct}%)`, value: currencyPlain(vat) },
+      { label: 'TOTAL (inc VAT)', value: currencyPlain(total) },
+    ];
+    totals.forEach((row, idx) => {
+      drawTextInColumn(doc, row.label, columns.label, { size: 11, lineHeight: 16, color: BRAND_COLORS.slate });
+      drawTextInColumn(doc, row.value, columns.value, { size: 11, lineHeight: 16, color: BRAND_COLORS.charcoal });
+      if (idx !== totals.length - 1) doc.cursorY -= 2;
     });
 
-    y -= 8;
-    addSummary('Total Discount Amount', currencyPlain(totalDiscountAmount));
-    addSummary('Subtotal (ex VAT)', currencyPlain(subtotal));
-    addSummary(`VAT (${vatPct}%)`, currencyPlain(vat));
-    addSummary('TOTAL (inc VAT)', currencyPlain(total), true);
-
-    pages.push(cur);
-    saveBlob('sacap_summary.pdf', createSimplePdfFromPages(pages));
+    saveBlob('sacap_summary.pdf', createSimplePdfFromPages(finishDoc(doc)));
   };
 
   return (

@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
-import type { BimMethod, BimPreset, PdfRun } from '../types';
+import type { BimMethod, BimPreset } from '../types';
 import { useLocalStorageNumber, useLocalStorageState, useLocalStorageString } from '../hooks/useLocalStorage';
 import { currency, currencyPlain } from '../utils/formatting';
 import { exportExcelTable, saveBlob } from '../utils/export';
-import { createSimplePdfFromPages, SIMPLE_PDF_PAGE } from '../services/pdfService';
+import { createSimplePdfFromPages } from '../services/pdfService';
+import { createPdfDoc, drawHeading, drawKeyValue, drawTableRows, drawTextInColumn, finishDoc, CONTENT_WIDTH, MARGIN_LEFT } from '../services/pdfLayout';
 import { HOURS_PER_DAY, SCAN_M2_PER_DAY, MODEL_M2_PER_DAY, BIM_PRESETS, HOURLY_BIM_RATE, BRAND_COLORS } from '../constants';
 import { getProjectDetailsSnapshot, formatExportDate } from '../utils/projectDetails';
 
@@ -79,129 +80,119 @@ export function BimSection({ clientName, vatPct }: BimSectionProps) {
   };
   
   const handleExportPdf = () => {
+    const doc = createPdfDoc();
+    const { columns } = doc;
     const projectDetails = getProjectDetailsSnapshot({ clientName });
     const detailRows = [...projectDetails.rows, ['Exported On', formatExportDate()]];
-    const pages: PdfRun[][] = [];
-    const brand = BRAND_COLORS;
-    const margin = 48;
-    const width = SIMPLE_PDF_PAGE.width - margin * 2;
-    const tableWidth = width;
-    const headerX = margin;
-    const columnX = bimMethod === 'per_m2'
-      ? [margin, margin + 200, margin + 320, margin + 430]
-      : [margin, margin + 170, margin + 300, margin + 420];
-    let cur: PdfRun[] = [];
-    let y = 0;
 
-    const rect = (x: number, top: number, w: number, h: number, fill?: [number, number, number], stroke?: [number, number, number], strokeWidth?: number) => {
-      cur.push({ kind: 'rect', x, y: top - h, width: w, height: h, fill, stroke, strokeWidth });
-    };
-    const text = (value: string, x: number, yPos: number, size = 10, bold = false, color = brand.charcoal) => {
-      cur.push({ text: value, x, y: yPos, size, font: bold ? 'bold' : 'regular', color });
-    };
+    drawHeading(doc, 'Fee Proposal');
+    drawHeading(doc, 'BIM Fee Summary', 12, BRAND_COLORS.accent);
+    detailRows.forEach(([label, value]) => drawKeyValue(doc, label, value, { size: 11, lineHeight: 15 }));
+    doc.cursorY -= 8;
 
-    const drawHeader = (withDetails: boolean) => {
-      const headerHeight = 70;
-      rect(headerX, y, tableWidth, headerHeight, brand.charcoal);
-      rect(headerX, y - headerHeight - 4, tableWidth, 4, brand.accent);
-      text('Fee Proposal', margin, y - 26, 18, true, brand.light);
-      text('BIM Fee Summary', margin, y - 44, 12, false, brand.light);
-      text(projectDetails.clientName || 'Unnamed Client', margin + width - 160, y - 28, 9, false, brand.light);
-      text(detailRows.at(-1)?.[1] ?? '', margin + width - 160, y - 42, 9, false, brand.light);
-      y -= headerHeight + 18;
-      if (withDetails) {
-        detailRows.forEach(([label, value]) => {
-          const rowHeight = 20;
-          rect(headerX, y, tableWidth, rowHeight, brand.light);
-          text(label, margin, y - 6, 9, true, brand.slate);
-          text(value, margin + width / 2, y - 6, 10, false, brand.charcoal);
-          y -= rowHeight;
-        });
-        y -= 10;
-      }
-    };
+    // Intro cards as key/values
+    const methodLabel = bimMethod === 'per_m2' ? 'Method: Per m²' : 'Method: Hourly';
+    drawKeyValue(doc, methodLabel, bimMethod === 'per_m2' ? `Preset: ${bimPreset}` : `Hourly rate: ${currencyPlain(HOURLY_BIM_RATE)}`);
+    if (bimMethod === 'per_m2') {
+      drawKeyValue(doc, 'Gross area', `${bimArea.toLocaleString('en-ZA')} m²`);
+    } else {
+      drawKeyValue(doc, 'Total hours', String(bimHrsScan + bimHrsReg + bimHrsModel));
+    }
+    doc.cursorY -= 6;
 
-    const startPage = (withDetails: boolean) => {
-      cur = [];
-      y = SIMPLE_PDF_PAGE.height - margin;
-      drawHeader(withDetails);
-    };
+    // Table headers
+    const tableCols = bimMethod === 'per_m2'
+      ? [
+          columns.label,
+          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.45 + 8, width: CONTENT_WIDTH * 0.2, align: 'left' as const },
+          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.65 + 12, width: CONTENT_WIDTH * 0.15, align: 'left' as const },
+          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.8 + 18, width: CONTENT_WIDTH * 0.2 - 18, align: 'right' as const },
+        ]
+      : [
+          columns.label,
+          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.45 + 8, width: CONTENT_WIDTH * 0.15, align: 'left' as const },
+          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.6 + 12, width: CONTENT_WIDTH * 0.15, align: 'left' as const },
+          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.75 + 16, width: CONTENT_WIDTH * 0.25 - 16, align: 'right' as const },
+        ];
 
-    const checkBreak = (space = 60) => {
-      if (y < margin + space) {
-        pages.push(cur);
-        startPage(false);
-      }
-    };
-
-    const addRow = (cols: string[], opts?: { header?: boolean; bold?: boolean }) => {
-      checkBreak(opts?.header ? 90 : 60);
-      if (opts?.header) rect(headerX, y + 6, tableWidth, 18, brand.slate);
-      cols.forEach((val, idx) => {
-        text(val, columnX[idx], y, opts?.header ? 9 : 10, opts?.header || opts?.bold, opts?.header ? brand.light : brand.charcoal);
-      });
-      y -= opts?.header ? 18 : 16;
-    };
-
-    const addSummary = (label: string, value: string, highlight = false) => {
-      const rowHeight = 20;
-      checkBreak();
-      rect(headerX, y, tableWidth, rowHeight, highlight ? brand.accent : brand.light);
-      text(label, margin, y - 6, 10, true, highlight ? brand.charcoal : brand.slate);
-      text(value, margin + width - 80, y - 6, 10, true, brand.charcoal);
-      y -= rowHeight;
-    };
-
-    const addCards = () => {
-      const cards: [string, string][] = bimMethod === 'per_m2'
-        ? [
-            ['Method', 'Per m²'],
-            ['Gross Area', `${bimArea.toLocaleString('en-ZA')} m²`],
-            ['Preset', bimPreset === 'auto' ? 'Auto' : bimPreset],
-          ]
-        : [
-            ['Method', 'Hourly'],
-            ['Hourly Rate', currencyPlain(HOURLY_BIM_RATE)],
-            ['Total Hours', String(bimHrsScan + bimHrsReg + bimHrsModel)],
-          ];
-      const cardWidth = (width - 20) / cards.length;
-      checkBreak(140);
-      cards.forEach(([label, value], idx) => {
-        const cardX = margin + idx * (cardWidth + 10);
-        rect(cardX, y, cardWidth, 42, brand.light);
-        text(label, cardX + 6, y - 14, 9, true, brand.slate);
-        text(value, cardX + 6, y - 26, 12, true, brand.charcoal);
-      });
-      y -= 48;
-    };
-
-    startPage(true);
-    addCards();
-    addRow(
-      bimMethod === 'per_m2' ? ['Item', 'Rate', 'Area', 'Amount'] : ['Item', 'Hours', 'Rate', 'Amount'],
-      { header: true },
+    drawTableRows(
+      doc,
+      [
+        [
+          { text: 'Item', column: tableCols[0], size: 11, color: BRAND_COLORS.light },
+          { text: bimMethod === 'per_m2' ? 'Rate' : 'Hours', column: tableCols[1], size: 11, color: BRAND_COLORS.light },
+          { text: bimMethod === 'per_m2' ? 'Area' : 'Rate', column: tableCols[2], size: 11, color: BRAND_COLORS.light },
+          { text: 'Amount', column: tableCols[3], size: 11, color: BRAND_COLORS.light },
+        ],
+      ],
+      16,
     );
 
+    const rows: Array<Array<{ text: string; column: any; size?: number }>> = [];
     if (bimMethod === 'per_m2') {
-      addRow(['Scanning', currencyPlain(bimRates.scan), `${bimArea.toLocaleString('en-ZA')} m²`, currencyPlain(scanAmount)]);
-      addRow(['Registration', currencyPlain(bimRates.reg), `${bimArea.toLocaleString('en-ZA')} m²`, currencyPlain(regAmount)]);
-      addRow(['Modelling', currencyPlain(bimRates.model), `${bimArea.toLocaleString('en-ZA')} m²`, currencyPlain(modelAmount)]);
-      y -= 8;
-      addSummary('Subtotal (ex VAT)', currencyPlain(subtotalBim));
-      addSummary(`VAT (${vatPct}%)`, currencyPlain(vatBim));
-      addSummary('TOTAL (inc VAT)', currencyPlain(totalBim), true);
+      rows.push(
+        [
+          { text: 'Scanning', column: tableCols[0] },
+          { text: currencyPlain(bimRates.scan), column: tableCols[1] },
+          { text: `${bimArea.toLocaleString('en-ZA')} m²`, column: tableCols[2] },
+          { text: currencyPlain(scanAmount), column: tableCols[3] },
+        ],
+        [
+          { text: 'Registration', column: tableCols[0] },
+          { text: currencyPlain(bimRates.reg), column: tableCols[1] },
+          { text: `${bimArea.toLocaleString('en-ZA')} m²`, column: tableCols[2] },
+          { text: currencyPlain(regAmount), column: tableCols[3] },
+        ],
+        [
+          { text: 'Modelling', column: tableCols[0] },
+          { text: currencyPlain(bimRates.model), column: tableCols[1] },
+          { text: `${bimArea.toLocaleString('en-ZA')} m²`, column: tableCols[2] },
+          { text: currencyPlain(modelAmount), column: tableCols[3] },
+        ],
+      );
     } else {
-      addRow(['Scanning', String(bimHrsScan), currencyPlain(HOURLY_BIM_RATE), currencyPlain(bimHrsScan * HOURLY_BIM_RATE)]);
-      addRow(['Registration', String(bimHrsReg), currencyPlain(HOURLY_BIM_RATE), currencyPlain(bimHrsReg * HOURLY_BIM_RATE)]);
-      addRow(['Modelling', String(bimHrsModel), currencyPlain(HOURLY_BIM_RATE), currencyPlain(bimHrsModel * HOURLY_BIM_RATE)]);
-      y -= 8;
-      addSummary('Subtotal (ex VAT)', currencyPlain(subtotalHrs));
-      addSummary(`VAT (${vatPct}%)`, currencyPlain(vatHrs));
-      addSummary('TOTAL (inc VAT)', currencyPlain(totalHrs), true);
+      rows.push(
+        [
+          { text: 'Scanning', column: tableCols[0] },
+          { text: String(bimHrsScan), column: tableCols[1] },
+          { text: currencyPlain(HOURLY_BIM_RATE), column: tableCols[2] },
+          { text: currencyPlain(bimHrsScan * HOURLY_BIM_RATE), column: tableCols[3] },
+        ],
+        [
+          { text: 'Registration', column: tableCols[0] },
+          { text: String(bimHrsReg), column: tableCols[1] },
+          { text: currencyPlain(HOURLY_BIM_RATE), column: tableCols[2] },
+          { text: currencyPlain(bimHrsReg * HOURLY_BIM_RATE), column: tableCols[3] },
+        ],
+        [
+          { text: 'Modelling', column: tableCols[0] },
+          { text: String(bimHrsModel), column: tableCols[1] },
+          { text: currencyPlain(HOURLY_BIM_RATE), column: tableCols[2] },
+          { text: currencyPlain(bimHrsModel * HOURLY_BIM_RATE), column: tableCols[3] },
+        ],
+      );
     }
+    drawTableRows(doc, rows, 16);
+    doc.cursorY -= 6;
 
-    pages.push(cur);
-    saveBlob('bim_summary.pdf', createSimplePdfFromPages(pages));
+    const totals = bimMethod === 'per_m2'
+      ? [
+          { label: 'Subtotal (ex VAT)', value: currencyPlain(subtotalBim) },
+          { label: `VAT (${vatPct}%)`, value: currencyPlain(vatBim) },
+          { label: 'TOTAL (inc VAT)', value: currencyPlain(totalBim) },
+        ]
+      : [
+          { label: 'Subtotal (ex VAT)', value: currencyPlain(subtotalHrs) },
+          { label: `VAT (${vatPct}%)`, value: currencyPlain(vatHrs) },
+          { label: 'TOTAL (inc VAT)', value: currencyPlain(totalHrs) },
+        ];
+    totals.forEach((row) => {
+      drawTextInColumn(doc, row.label, columns.label, { size: 11, lineHeight: 16, color: BRAND_COLORS.slate });
+      drawTextInColumn(doc, row.value, columns.value, { size: 11, lineHeight: 16, color: BRAND_COLORS.charcoal });
+      doc.cursorY -= 2;
+    });
+
+    saveBlob('bim_summary.pdf', createSimplePdfFromPages(finishDoc(doc)));
   };
 
 
