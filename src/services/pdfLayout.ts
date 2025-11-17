@@ -131,7 +131,7 @@ export function drawKeyValue(doc: PdfDoc, label: string, value: string, opts?: {
     const l = linesLabel[i] ?? '';
     const v = linesValue[i] ?? '';
     doc.current.push({ text: l, x: labelCol.x, y: doc.cursorY - lineHeight, size, color: [0.83, 0.72, 0.45], font: 'bold' });
-    doc.current.push({ text: v, x: valueCol.x, y: doc.cursorY - lineHeight, size, color: [1, 1, 1], font: 'regular' });
+    doc.current.push({ text: v, x: valueCol.x, y: doc.cursorY - lineHeight, size, color: [0.07, 0.07, 0.08], font: 'regular' });
     doc.cursorY -= lineHeight;
   }
 }
@@ -160,7 +160,7 @@ export function drawTableRows(doc: PdfDoc, rows: Array<Array<{ text: string; col
           x = cell.column.x + (cell.column.width - textWidth) / 2;
         }
         const y = doc.cursorY - lineHeight * (idx + 1);
-        doc.current.push({ text: line, x, y, size, color: cell.color ?? [1, 1, 1], font: 'regular' });
+        doc.current.push({ text: line, x, y, size, color: cell.color ?? [0.07, 0.07, 0.08], font: 'regular' });
       });
     });
     doc.cursorY -= rowHeight + 2; // spacing between rows
