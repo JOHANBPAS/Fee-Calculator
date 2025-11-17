@@ -35,17 +35,41 @@ export async function upsertProfile(userId: string, email: string | undefined) {
 }
 
 export async function listProjectsForUser(userId: string): Promise<ProjectRow[]> {
-  const { data, error } = await supabase
+  // Fetch owned projects
+  const ownedPromise = supabase
     .from('fee_projects')
     .select('*, project_shares!left(shared_with_user_id)')
-    .or(`user_id.eq.${userId},project_shares.shared_with_user_id.eq.${userId}`)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
-  if (error) throw error;
-  return (data ?? []).map((row: any) => ({
+
+  // Fetch projects shared with the user
+  const sharedPromise = supabase
+    .from('project_shares')
+    .select('project_id, fee_projects!inner(*)')
+    .eq('shared_with_user_id', userId);
+
+  const [{ data: owned, error: ownedErr }, { data: shared, error: sharedErr }] = await Promise.all([
+    ownedPromise,
+    sharedPromise,
+  ]);
+  if (ownedErr) throw ownedErr;
+  if (sharedErr) throw sharedErr;
+
+  const ownedRows: ProjectRow[] = (owned ?? []).map((row: any) => ({
     ...row,
     project_shares: row.project_shares ?? [],
-    isOwner: row.user_id === userId,
+    isOwner: true,
   }));
+
+  const sharedRows: ProjectRow[] = (shared ?? []).map((row: any) => {
+    const proj = (row as any).fee_projects;
+    return { ...proj, project_shares: [], isOwner: false };
+  });
+
+  // Combine and sort newest first
+  return [...ownedRows, ...sharedRows].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
 }
 
 export async function createProject(userId: string, payload: FeeProjectInput) {
