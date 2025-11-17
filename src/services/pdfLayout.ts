@@ -50,7 +50,7 @@ export function drawBackground(page: PdfRun[]) {
     y: 0,
     width: PAGE_WIDTH,
     height: PAGE_HEIGHT,
-    fill: [0.07, 0.07, 0.08],
+    fill: [1,1,1],
   });
 }
 
@@ -93,7 +93,7 @@ export function wrapLines(text: string, maxWidth: number, size: number) {
 export function drawTextInColumn(doc: PdfDoc, text: string, column: ColumnDef, opts?: { size?: number; lineHeight?: number; color?: [number, number, number] }) {
   const size = opts?.size ?? 10;
   const lineHeight = opts?.lineHeight ?? size + 2;
-  const color = opts?.color ?? [1, 1, 1];
+  const color = opts?.color ?? [0.07, 0.07, 0.08];
   const lines = wrapLines(text, column.width, size);
   lines.forEach((line) => {
     ensureSpace(doc, lineHeight);
