@@ -269,6 +269,49 @@ function buildHourlySummary(vatPct: number) {
   };
 }
 
+const PERSISTED_LOCAL_KEYS = [
+  'clientName',
+  'vatPct',
+  'activeTab',
+  'sacapVow',
+  'sacapComplexity',
+  'sacapStages',
+  'sacapOverallDiscountPct',
+  'sacapAecomKey',
+  'sacapAecomSize',
+  'sacapAecomRateChoice',
+  'basketDiscountPct',
+  'basketTargetPct',
+  'basketSelectedRows',
+  'basketVowOverride',
+  'basketArcComplexity',
+  'basketManualRows',
+  'basketEffectivePctOverride',
+  'hourlyProjectName',
+  'hourlyRates',
+  'hourlyPhaseRoles',
+  'bimMethod',
+  'bimPreset',
+  'bimArea',
+  'bimRates',
+  'bimOverrideScan',
+  'bimOverrideReg',
+  'bimOverrideModel',
+  'bimHrsScan',
+  'bimHrsReg',
+  'bimHrsModel',
+];
+
+function captureLocalStorage(keys: string[]): Record<string, string> {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') return {};
+  const entries: Record<string, string> = {};
+  keys.forEach((key) => {
+    const value = window.localStorage.getItem(key);
+    if (value !== null && value !== undefined) entries[key] = value;
+  });
+  return entries;
+}
+
 export interface BasketSummaryRow {
   label: string;
   group: string;
@@ -290,6 +333,8 @@ export interface FeeSnapshot {
   vatPct: number;
   globalVow: number;
   activeTab: string;
+  lastEditedBy?: string | null;
+  lastEditedByEmail?: string | null;
   projectDetails: ReturnType<typeof getProjectDetailsSnapshot>;
   basket: BasketSummary;
   sacap: {
@@ -350,6 +395,7 @@ export interface FeeSnapshot {
     numbers: Record<string, number>;
     json: Record<string, unknown>;
   };
+  rawLocalStorage?: Record<string, string>;
   totals: {
     vatAmount: number;
     totalWithVat: number;
@@ -465,6 +511,7 @@ export function buildFeeSnapshot(params: {
   const sacapSummary = buildSacapSummary(params.globalVow, params.vatPct);
   const bimSummary = buildBimSummary(params.clientName, params.vatPct);
   const hourlySummary = buildHourlySummary(params.vatPct);
+  const rawLocalStorage = captureLocalStorage(PERSISTED_LOCAL_KEYS);
 
   return {
     clientName: params.clientName,
@@ -498,6 +545,7 @@ export function buildFeeSnapshot(params: {
         ...hourlySummary.storageKeys.json,
       },
     },
+    rawLocalStorage,
     totals: {
       vatAmount: basket.subtotal * (params.vatPct / 100),
       totalWithVat: basket.subtotal * (1 + params.vatPct / 100),
@@ -516,6 +564,7 @@ export function applySnapshotToApp(
   },
 ) {
   const storage = snapshot.storageKeys ?? { strings: {}, numbers: {}, json: {} } as FeeSnapshot['storageKeys'];
+  const rawStorage = snapshot.rawLocalStorage ?? {};
   if (typeof window !== 'undefined') {
     Object.entries(storage.strings).forEach(([key, value]) => {
       window.localStorage.setItem(key, value);
@@ -525,6 +574,9 @@ export function applySnapshotToApp(
     });
     Object.entries(storage.json).forEach(([key, value]) => {
       window.localStorage.setItem(key, JSON.stringify(value));
+    });
+    Object.entries(rawStorage).forEach(([key, value]) => {
+      window.localStorage.setItem(key, value);
     });
   }
   setters.setClientName(snapshot.clientName);

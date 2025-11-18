@@ -107,7 +107,7 @@ export function ProjectSyncPanel(props: ProjectSyncPanelProps) {
     setLoading(true);
     setMessage(null);
     try {
-      const createdAt = await saveCalculation(selectedProjectId, snapshot);
+      const createdAt = await saveCalculation(selectedProjectId, snapshot, { id: user?.id ?? '', email: user?.email });
       if (createdAt) {
         setLastSavedByProject((prev) => ({ ...prev, [selectedProjectId]: createdAt }));
       }

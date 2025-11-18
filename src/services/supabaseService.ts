@@ -88,19 +88,33 @@ export async function deleteProject(projectId: string) {
   if (error) throw error;
 }
 
-export async function saveCalculation(projectId: string, snapshot: FeeSnapshot) {
+export async function saveCalculation(
+  projectId: string,
+  snapshot: FeeSnapshot,
+  editor?: { id: string; email?: string | null },
+) {
+  const savedAt = new Date().toISOString();
+  const enrichedSnapshot: FeeSnapshot = {
+    ...snapshot,
+    savedAt,
+    lastEditedBy: editor?.id ?? snapshot.lastEditedBy ?? null,
+    lastEditedByEmail: editor?.email ?? snapshot.lastEditedByEmail ?? null,
+  };
   const { data, error } = await supabase
     .from('fee_calculations')
     .insert({
       project_id: projectId,
-      parameters: snapshot,
+      parameters: enrichedSnapshot,
       results: {
-        basket: snapshot.basket,
-        projectDetails: snapshot.projectDetails,
-        totals: snapshot.totals,
-        sacap: snapshot.sacap,
-        bim: snapshot.bim,
-        hourly: snapshot.hourly,
+        basket: enrichedSnapshot.basket,
+        projectDetails: enrichedSnapshot.projectDetails,
+        totals: enrichedSnapshot.totals,
+        sacap: enrichedSnapshot.sacap,
+        bim: enrichedSnapshot.bim,
+        hourly: enrichedSnapshot.hourly,
+        lastEditedBy: enrichedSnapshot.lastEditedBy,
+        lastEditedByEmail: enrichedSnapshot.lastEditedByEmail,
+        savedAt,
       },
     })
     .select('created_at')
