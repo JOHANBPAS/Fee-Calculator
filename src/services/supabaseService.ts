@@ -30,7 +30,8 @@ export interface ProjectRow {
 }
 
 export async function upsertProfile(userId: string, email: string | undefined) {
-  const { error } = await supabase.from('profiles').upsert({ id: userId, email });
+  const normalizedEmail = email?.trim().toLowerCase();
+  const { error } = await supabase.from('profiles').upsert({ id: userId, email: normalizedEmail });
   if (error) throw error;
 }
 
@@ -140,10 +141,13 @@ export async function fetchLatestTimestampsByProject(): Promise<Record<string, s
 
 // Sharing helpers
 export async function shareProjectByEmail(projectId: string, email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) throw new Error('Please enter an email');
+
   const { data: profile, error: profileErr } = await supabase
     .from('profiles')
     .select('id')
-    .eq('email', email)
+    .ilike('email', normalizedEmail)
     .maybeSingle();
   if (profileErr) throw profileErr;
   if (!profile?.id) throw new Error('User not found with that email');
