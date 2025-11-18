@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabaseClient';
+import { upsertProfile } from '../services/supabaseService';
 
 interface AuthContextValue {
   session: Session | null;
@@ -32,6 +33,12 @@ export function SupabaseAuthProvider({ children }: { children: React.ReactNode }
       listener?.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    // Ensure a profile row exists for email-based lookups/sharing
+    upsertProfile(session.user.id, session.user.email).catch((err) => console.error(err));
+  }, [session?.user]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });

@@ -157,15 +157,29 @@ export async function shareProjectByEmail(projectId: string, email: string) {
 export async function listProjectShares(projectId: string): Promise<ProjectShare[]> {
   const { data, error } = await supabase
     .from('project_shares')
-    .select('id, project_id, shared_with_user_id, created_at, profiles!project_shares_shared_with_user_id_fkey(email)')
+    .select('id, project_id, shared_with_user_id, created_at')
     .eq('project_id', projectId);
   if (error) throw error;
-  return (data ?? []).map((row: any) => ({
+  const rows = data ?? [];
+
+  // Fetch emails for shared users without relying on FK relationships in Supabase schema cache
+  const userIds = Array.from(new Set(rows.map((r) => r.shared_with_user_id).filter(Boolean)));
+  let profilesById: Record<string, string | undefined> = {};
+  if (userIds.length) {
+    const { data: profiles, error: profilesErr } = await supabase
+      .from('profiles')
+      .select('id, email')
+      .in('id', userIds);
+    if (profilesErr) throw profilesErr;
+    profilesById = Object.fromEntries((profiles ?? []).map((p) => [p.id, p.email]));
+  }
+
+  return rows.map((row: any) => ({
     id: row.id,
     project_id: row.project_id,
     shared_with_user_id: row.shared_with_user_id,
     created_at: row.created_at,
-    shared_with_email: row.profiles?.email,
+    shared_with_email: profilesById[row.shared_with_user_id],
   }));
 }
 
