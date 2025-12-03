@@ -165,7 +165,7 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
 
         // Repeats section
         if (unit.numRepeats > 0) {
-          excelRows.push([`  Repeat Units (${unit.numRepeats} unit${unit.numRepeats > 1 ? 's' : ''} @ 35% discount)`, '', '', '', '']);
+          excelRows.push([`  Repeat Units (${unit.numRepeats} unit${unit.numRepeats > 1 ? 's' : ''} @ 65% discount)`, '', '', '', '']);
 
           enabledRows.forEach((stage) => {
             const stageFeePerUnit = unitBaseFee * (stage.pct / 100);
@@ -309,7 +309,7 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
 
         // Repeats section
         if (unit.numRepeats > 0) {
-          drawKeyValue(doc, 'Repeat Units', `${unit.numRepeats} unit${unit.numRepeats > 1 ? 's' : ''} @ 35% discount`, { size: 10, lineHeight: 14 });
+          drawKeyValue(doc, 'Repeat Units', `${unit.numRepeats} unit${unit.numRepeats > 1 ? 's' : ''} @ 65% discount`, { size: 10, lineHeight: 14 });
 
           const repeatRows = enabledRows.map((stage) => {
             const stageFeePerUnit = unitBaseFee * (stage.pct / 100);
