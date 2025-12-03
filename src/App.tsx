@@ -91,7 +91,7 @@ function App() {
                       onClick={() => setActiveTab(tab.key)}
                       className={cn(
                         "flex-1",
-                        activeTab === tab.key && "bg-background text-foreground shadow-sm hover:bg-background"
+                        activeTab === tab.key && "shadow-sm"
                       )}
                     >
                       {tab.label}

@@ -14,11 +14,20 @@ import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Label } from './ui/label';
 import { cn } from '../lib/utils';
-import { Download } from 'lucide-react';
+import { Download, Plus, Trash2 } from 'lucide-react';
 
 interface SacapSectionProps {
   globalVow: number;
   vatPct: number;
+}
+
+interface UnitType {
+  id: string;
+  name: string;
+  vow: number;
+  complexity: SacapComplexity;
+  numPrototypes: number;
+  numRepeats: number;
 }
 
 export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
@@ -31,8 +40,12 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
     { name: 'Stage 5: Construction', pct: 30, override: 0, enabled: true, discountPct: 0 },
     { name: 'Stage 6: Handover and Close-out', pct: 3, override: 0, enabled: true, discountPct: 0 },
   ];
+
+  const [calculationMode, setCalculationMode] = useLocalStorageString('sacapMode', 'simple') as ['simple' | 'advanced', (v: 'simple' | 'advanced') => void];
   const [vow, setVow] = useLocalStorageNumber('sacapVow', globalVow);
   const [complexity, setComplexity] = useLocalStorageString('sacapComplexity', 'low') as [SacapComplexity, (v: SacapComplexity) => void];
+  const [unitTypes, setUnitTypes] = useLocalStorageState<UnitType[]>('sacapUnits', [{ id: '1', name: 'Unit Type A', vow: 1000000, complexity: 'low', numPrototypes: 1, numRepeats: 0 }]);
+
   const [stages, setStages] = useLocalStorageState<SacapStage[]>('sacapStages', defaults);
   const [overallDiscountPct, setOverallDiscountPct] = useLocalStorageNumber('sacapOverallDiscountPct', 0);
   const handleOverallDiscountChange = (value: number) => {
@@ -53,11 +66,24 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
   const projectDetails = getProjectDetailsSnapshot({ aecomKey, aecomSize, complexity });
   const projectDetailRows = [...projectDetails.rows, ['Exported On', exportedOn]];
 
-  const baseFee = useMemo(() => {
-    const table = complexity === 'low' ? ARC_LOW : complexity === 'medium' ? ARC_MED : ARC_HIGH;
-    for (const b of table) { if (vow <= b.to) return b.primary + Math.max(0, vow - b.over) * b.rate; }
+  const calculateFee = (val: number, comp: SacapComplexity) => {
+    const table = comp === 'low' ? ARC_LOW : comp === 'medium' ? ARC_MED : ARC_HIGH;
+    for (const b of table) { if (val <= b.to) return b.primary + Math.max(0, val - b.over) * b.rate; }
     return 0;
-  }, [vow, complexity]);
+  };
+
+  const baseFee = useMemo(() => {
+    if (calculationMode === 'simple') {
+      return calculateFee(vow, complexity);
+    } else {
+      return unitTypes.reduce((acc, unit) => {
+        const unitBaseFee = calculateFee(unit.vow, unit.complexity);
+        const protoFee = unitBaseFee * unit.numPrototypes;
+        const repeatFee = (unitBaseFee * 0.35) * unit.numRepeats;
+        return acc + protoFee + repeatFee;
+      }, 0);
+    }
+  }, [vow, complexity, calculationMode, unitTypes]);
 
   const overallFactor = Math.max(0, 1 - (overallDiscountPct || 0) / 100);
 
@@ -79,6 +105,19 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
   const vat = subtotal * (vatPct / 100);
   const total = subtotal + vat;
 
+  const addUnitType = () => {
+    const newId = Math.random().toString(36).substr(2, 9);
+    setUnitTypes(prev => [...prev, { id: newId, name: 'New Unit Type', vow: 1000000, complexity: 'low', numPrototypes: 1, numRepeats: 0 }]);
+  };
+
+  const removeUnitType = (id: string) => {
+    setUnitTypes(prev => prev.filter(u => u.id !== id));
+  };
+
+  const updateUnitType = (id: string, updates: Partial<UnitType>) => {
+    setUnitTypes(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
+  };
+
   const handleExportExcel = () => {
     const headers = ['Stage', '% of base', 'Discount %', 'Override (ZAR)', 'Amount (ZAR)'];
     const excelRows: string[][] = enabledRows.map((r) => [
@@ -89,7 +128,11 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
       currencyPlain(r.amount),
     ]);
     excelRows.push([]); // spacer
-    excelRows.push(['Summary', 'Value of Works', '', '', currencyPlain(vow)]);
+    if (calculationMode === 'simple') {
+      excelRows.push(['Summary', 'Value of Works', '', '', currencyPlain(vow)]);
+    } else {
+      excelRows.push(['Summary', 'Calculation Mode', 'Advanced (Prototypes & Repeats)', '', '']);
+    }
     excelRows.push(['Summary', 'Base Fee', '', '', currencyPlain(baseFee)]);
     excelRows.push(['Summary', 'Total discount amount', '', '', currencyPlain(totalDiscountAmount)]);
     excelRows.push(['Summary', 'TOTAL (ex VAT)', '', '', currencyPlain(subtotal)]);
@@ -108,10 +151,13 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
     doc.cursorY -= 6;
 
     const infoRows: { label: string; value: string }[] = [
-      { label: 'Value of Works', value: currencyPlain(vow) },
+      { label: 'Mode', value: calculationMode === 'simple' ? 'Simple' : 'Advanced (Prototypes & Repeats)' },
       { label: 'Base Fee', value: currencyPlain(baseFee) },
       { label: 'Overall Discount', value: `${overallDiscountPct}%` },
     ];
+    if (calculationMode === 'simple') {
+      infoRows.unshift({ label: 'Value of Works', value: currencyPlain(vow) });
+    }
     infoRows.forEach((r) => drawKeyValue(doc, r.label, r.value, { size: 11, lineHeight: 15 }));
     doc.cursorY -= 6;
 
@@ -180,46 +226,154 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className='grid md:grid-cols-3 gap-6'>
-          <div className="space-y-2">
-            <Label>Value of Works (ZAR)</Label>
-            <Input type='number' min={0} value={vow} onChange={(e) => setVow(Number(e.target.value))} />
-            <div className='text-xs text-muted-foreground'>Default from Basket: {currency(globalVow)}</div>
-          </div>
-          <div className="space-y-2">
-            <Label>Complexity</Label>
-            <select
-              className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
-              value={complexity}
-              onChange={(e) => setComplexity(e.target.value as SacapComplexity)}
+        <div className="flex items-center space-x-4 mb-4">
+          <Label>Calculation Mode:</Label>
+          <div className="flex bg-muted rounded-md p-1">
+            <button
+              className={cn("px-3 py-1 text-sm rounded-sm transition-all", calculationMode === 'simple' ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground")}
+              onClick={() => setCalculationMode('simple')}
             >
-              <option value='low'>Low</option><option value='medium'>Medium</option><option value='high'>High</option>
-            </select>
-            <div className='text-xs text-muted-foreground'>Base fee (auto): {currency(baseFee)}</div>
-          </div>
-          <div className="space-y-2">
-            <div className='flex items-center justify-between'>
-              <Label>Overall discount (%)</Label>
-              <span className='text-xs text-muted-foreground'>{overallDiscountPct.toFixed(0)}%</span>
-            </div>
-            <Input
-              type='number'
-              min={0}
-              max={100}
-              value={overallDiscountPct}
-              onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
-            />
-            <input
-              type='range'
-              min={0}
-              max={100}
-              step={1}
-              value={overallDiscountPct}
-              onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
-              className='w-full accent-primary h-2 bg-secondary rounded-lg appearance-none cursor-pointer'
-            />
+              Simple
+            </button>
+            <button
+              className={cn("px-3 py-1 text-sm rounded-sm transition-all", calculationMode === 'advanced' ? "bg-background shadow text-foreground" : "text-muted-foreground hover:text-foreground")}
+              onClick={() => setCalculationMode('advanced')}
+            >
+              Prototypes & Repeats
+            </button>
           </div>
         </div>
+
+        {calculationMode === 'simple' ? (
+          <div className='grid md:grid-cols-3 gap-6'>
+            <div className="space-y-2">
+              <Label>Value of Works (ZAR)</Label>
+              <Input type='number' min={0} value={vow} onChange={(e) => setVow(Number(e.target.value))} />
+              <div className='text-xs text-muted-foreground'>Default from Basket: {currency(globalVow)}</div>
+            </div>
+            <div className="space-y-2">
+              <Label>Complexity</Label>
+              <select
+                className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
+                value={complexity}
+                onChange={(e) => setComplexity(e.target.value as SacapComplexity)}
+              >
+                <option value='low'>Low</option><option value='medium'>Medium</option><option value='high'>High</option>
+              </select>
+              <div className='text-xs text-muted-foreground'>Base fee (auto): {currency(baseFee)}</div>
+            </div>
+            <div className="space-y-2">
+              <div className='flex items-center justify-between'>
+                <Label>Overall discount (%)</Label>
+                <span className='text-xs text-muted-foreground'>{overallDiscountPct.toFixed(0)}%</span>
+              </div>
+              <Input
+                type='number'
+                min={0}
+                max={100}
+                value={overallDiscountPct}
+                onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
+              />
+              <input
+                type='range'
+                min={0}
+                max={100}
+                step={1}
+                value={overallDiscountPct}
+                onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
+                className='w-full accent-primary h-2 bg-secondary rounded-lg appearance-none cursor-pointer'
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Unit Type Name</TableHead>
+                    <TableHead>Value of Works (per unit)</TableHead>
+                    <TableHead>Complexity</TableHead>
+                    <TableHead># Prototypes</TableHead>
+                    <TableHead># Repeats</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {unitTypes.map((unit) => {
+                    const unitBase = calculateFee(unit.vow, unit.complexity);
+                    const subtotal = (unitBase * unit.numPrototypes) + (unitBase * 0.35 * unit.numRepeats);
+                    return (
+                      <TableRow key={unit.id}>
+                        <TableCell>
+                          <Input value={unit.name} onChange={(e) => updateUnitType(unit.id, { name: e.target.value })} />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" min={0} value={unit.vow} onChange={(e) => updateUnitType(unit.id, { vow: Number(e.target.value) })} />
+                        </TableCell>
+                        <TableCell>
+                          <select
+                            className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
+                            value={unit.complexity}
+                            onChange={(e) => updateUnitType(unit.id, { complexity: e.target.value as SacapComplexity })}
+                          >
+                            <option value='low'>Low</option><option value='medium'>Medium</option><option value='high'>High</option>
+                          </select>
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" min={1} value={unit.numPrototypes} onChange={(e) => updateUnitType(unit.id, { numPrototypes: Number(e.target.value) })} />
+                        </TableCell>
+                        <TableCell>
+                          <Input type="number" min={0} value={unit.numRepeats} onChange={(e) => updateUnitType(unit.id, { numRepeats: Number(e.target.value) })} />
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {currency(subtotal)}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" onClick={() => removeUnitType(unit.id)}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="flex justify-between items-center">
+              <Button onClick={addUnitType} variant="outline" size="sm">
+                <Plus className="h-4 w-4 mr-2" /> Add Unit Type
+              </Button>
+              <div className="text-right">
+                <div className="text-sm text-muted-foreground">Total Base Fee</div>
+                <div className="text-xl font-bold text-primary">{currency(baseFee)}</div>
+              </div>
+            </div>
+            <div className="space-y-2 max-w-md ml-auto">
+              <div className='flex items-center justify-between'>
+                <Label>Overall discount (%)</Label>
+                <span className='text-xs text-muted-foreground'>{overallDiscountPct.toFixed(0)}%</span>
+              </div>
+              <Input
+                type='number'
+                min={0}
+                max={100}
+                value={overallDiscountPct}
+                onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
+              />
+              <input
+                type='range'
+                min={0}
+                max={100}
+                step={1}
+                value={overallDiscountPct}
+                onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
+                className='w-full accent-primary h-2 bg-secondary rounded-lg appearance-none cursor-pointer'
+              />
+            </div>
+          </div>
+        )}
 
         <div className='bg-muted/50 border rounded-lg p-4 space-y-4'>
           <div className='flex items-center justify-between gap-3 flex-wrap'>
@@ -230,9 +384,21 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
             <Button
               variant={aecomEstimate > 0 ? "default" : "secondary"}
               disabled={aecomEstimate <= 0}
-              onClick={() => { if (aecomEstimate > 0) setVow(aecomEstimate) }}
+              onClick={() => {
+                if (aecomEstimate > 0) {
+                  if (calculationMode === 'simple') {
+                    setVow(aecomEstimate);
+                  } else {
+                    // In advanced mode, maybe add a new unit type with this VOW?
+                    // For now, let's just copy it to clipboard or alert, or maybe add a new unit.
+                    // Let's add a new unit type.
+                    const newId = Math.random().toString(36).substr(2, 9);
+                    setUnitTypes(prev => [...prev, { id: newId, name: selectedAecom?.label || 'New Unit', vow: aecomEstimate, complexity: 'medium', numPrototypes: 1, numRepeats: 0 }]);
+                  }
+                }
+              }}
             >
-              Use estimate ({currency(aecomEstimate)})
+              {calculationMode === 'simple' ? `Use estimate (${currency(aecomEstimate)})` : `Add as Unit Type (${currency(aecomEstimate)})`}
             </Button>
           </div>
           <div className='grid md:grid-cols-4 gap-4'>
