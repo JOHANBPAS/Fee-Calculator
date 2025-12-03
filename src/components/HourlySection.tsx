@@ -7,6 +7,11 @@ import { createSimplePdfFromPages } from '../services/pdfService';
 import { createPdfDoc, drawHeading, drawKeyValue, drawTableRows, drawTextInColumn, finishDoc, CONTENT_WIDTH, MARGIN_LEFT } from '../services/pdfLayout';
 import { ROLE_LABEL, BRAND_COLORS } from '../constants';
 import { getProjectDetailsSnapshot, formatExportDate } from '../utils/projectDetails';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Label } from './ui/label';
+import { Download, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface PhaseHoursProps {
     rates: Record<RoleKey, number>;
@@ -28,29 +33,37 @@ const PhaseHours: React.FC<PhaseHoursProps> = ({ rates, onTotals }) => {
 
     const phaseRows = phases.map((p) => ({ ...p, amount: (Object.keys(p.hours) as RoleKey[]).reduce((s, k) => s + (rates[k] || 0) * (p.hours[k] || 0), 0) }));
     const sub = phaseRows.reduce((a, b) => a + b.amount, 0);
-    
+
     useEffect(() => { onTotals(sub); }, [sub, onTotals]);
 
     return (
-        <div className='p-3 bg-zinc-800/50 rounded-xl space-y-3'>
-            <div className='text-sm font-medium'>Project Name</div>
-            <input className='w-full bg-zinc-800 rounded-xl p-2' placeholder='e.g., Commercial Renovation' value={projectName} onChange={(e) => setProjectName(e.target.value)} />
-            <div className='space-y-2'>
+        <div className='space-y-4'>
+            <div className="space-y-2">
+                <Label>Project Name</Label>
+                <Input placeholder='e.g., Commercial Renovation' value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+            </div>
+            <div className='space-y-4'>
                 {phaseRows.map((row, idx) => (
-                    <div key={row.key} className='p-3 rounded-xl ring-1 ring-white/5 bg-zinc-900/60'>
-                        <div className='flex items-center justify-between mb-2'>
-                            <input className='text-sm font-medium bg-transparent' value={row.name} onChange={e => setPhases(cur => cur.map((p, i) => i === idx ? {...p, name: e.target.value} : p))} />
-                            <div className='text-amber-300 font-semibold'>{currency(row.amount)}</div>
-                        </div>
-                        <div className='grid md:grid-cols-3 gap-3'>
-                            {(Object.keys(zeroHours) as RoleKey[]).map((rk) => (
-                                <div key={rk}>
-                                    <div className='text-xs text-zinc-400 mb-1'>{ROLE_LABEL[rk]} Hours</div>
-                                    <input type='number' min={0} step={0.5} className='w-full bg-zinc-800 rounded-xl p-2' value={row.hours[rk] || 0} onChange={(e) => setPhases(cur => cur.map((x, i) => i === idx ? { ...x, hours: { ...x.hours, [rk]: Number(e.target.value) } } : x))} />
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                    <Card key={row.key} className="bg-muted/30">
+                        <CardContent className="p-4 space-y-4">
+                            <div className='flex items-center justify-between'>
+                                <Input
+                                    className='font-medium bg-transparent border-none shadow-none focus-visible:ring-0 px-0 h-auto text-base w-auto'
+                                    value={row.name}
+                                    onChange={e => setPhases(cur => cur.map((p, i) => i === idx ? { ...p, name: e.target.value } : p))}
+                                />
+                                <div className='text-primary font-semibold'>{currency(row.amount)}</div>
+                            </div>
+                            <div className='grid md:grid-cols-3 gap-4'>
+                                {(Object.keys(zeroHours) as RoleKey[]).map((rk) => (
+                                    <div key={rk} className="space-y-1">
+                                        <Label className='text-xs text-muted-foreground'>{ROLE_LABEL[rk]} Hours</Label>
+                                        <Input type='number' min={0} step={0.5} value={row.hours[rk] || 0} onChange={(e) => setPhases(cur => cur.map((x, i) => i === idx ? { ...x, hours: { ...x.hours, [rk]: Number(e.target.value) } } : x))} />
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
                 ))}
             </div>
         </div>
@@ -78,7 +91,7 @@ export function HourlySection({ vatPct }: HourlySectionProps) {
         const projectName = localStorage.getItem('hourlyProjectName') || 'Untitled Project';
         const headers = ['Phase', 'Role', 'Rate (ZAR/h)', 'Hours', 'Amount (ZAR)'];
         const rows: string[][] = [];
-        
+
         const projectDetails = getProjectDetailsSnapshot();
         const introRows = [...projectDetails.rows, ['Hourly Project Name', projectName || 'Untitled'], ['Exported On', formatExportDate()]];
 
@@ -93,7 +106,7 @@ export function HourlySection({ vatPct }: HourlySectionProps) {
                     phaseRows.push([p.name, ROLE_LABEL[rk], String(rates[rk] || 0), String(hrs), currencyPlain(amt)]);
                 }
             });
-            if(phaseRows.length > 0) {
+            if (phaseRows.length > 0) {
                 rows.push(...phaseRows);
                 rows.push([p.name, 'Phase Total', '', '', currencyPlain(phaseTotal)]);
                 rows.push([]);
@@ -180,35 +193,46 @@ export function HourlySection({ vatPct }: HourlySectionProps) {
     };
 
     return (
-        <section className='p-3 bg-zinc-900 rounded-2xl shadow space-y-4'>
-            <div className='flex items-center justify-between'>
-                 <h2 className='text-lg font-medium'>Hourly (Phases with Roles)</h2>
-                 <div className='flex items-center gap-2'>
-                    <button className='px-3 py-2 bg-zinc-100 text-zinc-900 rounded-xl text-sm transition-colors duration-150 hover:bg-zinc-200' onClick={handleExportExcel}>Export Excel</button>
-                    <button className='px-3 py-2 bg-emerald-500 text-white rounded-xl text-sm transition-colors duration-150 hover:bg-emerald-600' onClick={handleExportPdf}>Export PDF</button>
-                 </div>
-            </div>
-
-            <div className='flex items-center justify-between'>
-                <div className='text-sm text-zinc-400'>Hourly rates (used across phases)</div>
-                <button className='text-xs px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700' onClick={() => setShowRates(v => !v)}>{showRates ? 'Hide rates' : 'Show rates'}</button>
-            </div>
-            {showRates && (
-                <div className='grid md:grid-cols-3 gap-3'>
-                    {roleKeys.map((rk) => (
-                        <div key={rk}>
-                            <div className='text-sm mb-1'>{ROLE_LABEL[rk]} Rate (ZAR/h)</div>
-                            <input type='number' min={0} step={10} className='w-full bg-zinc-800 rounded-xl p-2' value={rates[rk] || 0} onChange={(e) => setRates(cur => ({ ...cur, [rk]: Number(e.target.value) }))} />
-                        </div>
-                    ))}
+        <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+                <CardTitle>Hourly (Phases with Roles)</CardTitle>
+                <div className='flex items-center gap-2'>
+                    <Button variant="outline" size="sm" onClick={handleExportExcel}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Excel
+                    </Button>
+                    <Button variant="default" size="sm" onClick={handleExportPdf}>
+                        <Download className="mr-2 h-4 w-4" />
+                        PDF
+                    </Button>
                 </div>
-            )}
-            <PhaseHours rates={rates} onTotals={setPhaseSubtotal} />
-            <div className='grid md:grid-cols-3 gap-3'>
-                <div className='p-3 rounded-xl bg-white/5'><div className='text-xs text-zinc-400'>Subtotal</div><div className='text-lg'>{currency(subtotal)}</div></div>
-                <div className='p-3 rounded-xl bg-white/5'><div className='text-xs text-zinc-400'>VAT ({vatPct}%)</div><div className='text-lg'>{currency(vat)}</div></div>
-                <div className='p-3 rounded-xl bg-white/5'><div className='text-xs text-zinc-400'>Total</div><div className='text-lg'>{currency(total)}</div></div>
-            </div>
-        </section>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                <div className='flex items-center justify-between'>
+                    <div className='text-sm text-muted-foreground'>Hourly rates (used across phases)</div>
+                    <Button variant="ghost" size="sm" onClick={() => setShowRates(v => !v)}>
+                        {showRates ? <><ChevronUp className="mr-2 h-4 w-4" /> Hide rates</> : <><ChevronDown className="mr-2 h-4 w-4" /> Show rates</>}
+                    </Button>
+                </div>
+                {showRates && (
+                    <div className='grid md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg'>
+                        {roleKeys.map((rk) => (
+                            <div key={rk} className="space-y-2">
+                                <Label>{ROLE_LABEL[rk]} Rate (ZAR/h)</Label>
+                                <Input type='number' min={0} step={10} value={rates[rk] || 0} onChange={(e) => setRates(cur => ({ ...cur, [rk]: Number(e.target.value) }))} />
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <PhaseHours rates={rates} onTotals={setPhaseSubtotal} />
+
+                <div className='grid md:grid-cols-3 gap-4 pt-4 border-t'>
+                    <div><div className='text-xs text-muted-foreground'>Subtotal</div><div className='text-lg font-semibold'>{currency(subtotal)}</div></div>
+                    <div><div className='text-xs text-muted-foreground'>VAT ({vatPct}%)</div><div className='text-lg font-semibold'>{currency(vat)}</div></div>
+                    <div><div className='text-xs text-muted-foreground'>Total</div><div className='text-lg font-semibold text-primary'>{currency(total)}</div></div>
+                </div>
+            </CardContent>
+        </Card>
     );
 }

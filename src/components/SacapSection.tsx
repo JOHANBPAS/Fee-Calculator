@@ -7,6 +7,14 @@ import { createSimplePdfFromPages } from '../services/pdfService';
 import { createPdfDoc, drawHeading, drawKeyValue, drawTableRows, drawTextInColumn, finishDoc, CONTENT_WIDTH, MARGIN_LEFT } from '../services/pdfLayout';
 import { AECOM_RATES, defaultRate, ARC_LOW, ARC_MED, ARC_HIGH, BRAND_COLORS } from '../constants';
 import { getProjectDetailsSnapshot, formatExportDate } from '../utils/projectDetails';
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from './ui/table';
+import { Checkbox } from './ui/checkbox';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Label } from './ui/label';
+import { cn } from '../lib/utils';
+import { Download } from 'lucide-react';
 
 interface SacapSectionProps {
   globalVow: number;
@@ -157,148 +165,214 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
   };
 
   return (
-    <section className='p-3 bg-zinc-900 rounded-2xl shadow space-y-3'>
-      <div className='flex items-center justify-between'>
-        <h2 className='text-lg font-medium'>SACAP Fee Generator</h2>
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <CardTitle>SACAP Fee Generator</CardTitle>
         <div className='flex items-center gap-2'>
-          <button className='px-3 py-2 bg-zinc-100 text-zinc-900 rounded-xl text-sm transition-colors duration-150 hover:bg-zinc-200' onClick={handleExportExcel}>Export Excel</button>
-          <button className='px-3 py-2 bg-emerald-500 text-white rounded-xl text-sm transition-colors duration-150 hover:bg-emerald-600' onClick={handleExportPdf}>Export PDF</button>
+          <Button variant="outline" size="sm" onClick={handleExportExcel}>
+            <Download className="mr-2 h-4 w-4" />
+            Excel
+          </Button>
+          <Button variant="default" size="sm" onClick={handleExportPdf}>
+            <Download className="mr-2 h-4 w-4" />
+            PDF
+          </Button>
         </div>
-      </div>
-      <div className='grid md:grid-cols-3 gap-3'>
-        <div>
-          <div className='text-sm mb-1'>Value of Works (ZAR)</div>
-          <input type='number' min={0} className='w-full bg-zinc-800 rounded-xl p-2' value={vow} onChange={(e) => setVow(Number(e.target.value))} />
-          <div className='text-xs text-zinc-400 mt-1'>Default from Basket: {currency(globalVow)}</div>
-        </div>
-        <div>
-          <div className='text-sm mb-1'>Complexity</div>
-          <select className='w-full bg-zinc-800 rounded-xl p-2' value={complexity} onChange={(e) => setComplexity(e.target.value as SacapComplexity)}>
-            <option value='low'>Low</option><option value='medium'>Medium</option><option value='high'>High</option>
-          </select>
-          <div className='text-xs text-zinc-400 mt-1'>Base fee (auto): {currency(baseFee)}</div>
-        </div>
-        <div>
-          <div className='flex items-center justify-between text-sm mb-1'>
-            <span>Overall discount (%)</span>
-            <span className='text-xs text-zinc-400'>{overallDiscountPct.toFixed(0)}%</span>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className='grid md:grid-cols-3 gap-6'>
+          <div className="space-y-2">
+            <Label>Value of Works (ZAR)</Label>
+            <Input type='number' min={0} value={vow} onChange={(e) => setVow(Number(e.target.value))} />
+            <div className='text-xs text-muted-foreground'>Default from Basket: {currency(globalVow)}</div>
           </div>
-          <input
-            type='number'
-            min={0}
-            max={100}
-            className='w-full bg-zinc-800 rounded-xl p-2 mb-2'
-            value={overallDiscountPct}
-            onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
-          />
-          <input
-            type='range'
-            min={0}
-            max={100}
-            step={1}
-            value={overallDiscountPct}
-            onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
-            className='w-full accent-amber-400'
-          />
-        </div>
-      </div>
-
-      <div className='bg-zinc-900/60 border border-white/5 rounded-2xl p-3 space-y-3'>
-        <div className='flex items-center justify-between gap-3 flex-wrap'>
-          <div>
-            <div className='text-sm font-medium'>AECOM Value of Works helper</div>
-            <div className='text-xs text-zinc-400'>Select a building type and area to estimate the VOW.</div>
-          </div>
-          <button
-            className={`px-3 py-2 rounded-xl transition-colors duration-150 ${aecomEstimate > 0 ? 'bg-emerald-500 text-white hover:bg-emerald-600' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'}`}
-            onClick={() => { if (aecomEstimate > 0) setVow(aecomEstimate) }}
-            disabled={aecomEstimate <= 0}
-          >
-            Use estimate ({currency(aecomEstimate)})
-          </button>
-        </div>
-        <div className='grid md:grid-cols-4 gap-3'>
-          <div className='md:col-span-2'>
-            <div className='text-xs text-zinc-400 mb-1'>Building type</div>
+          <div className="space-y-2">
+            <Label>Complexity</Label>
             <select
-              className='w-full bg-zinc-800 rounded-xl p-2'
-              value={selectedAecom?.key || ''}
-              onChange={(e) => setAecomKey(e.target.value)}
+              className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
+              value={complexity}
+              onChange={(e) => setComplexity(e.target.value as SacapComplexity)}
             >
-              {AECOM_RATES.map((group) => {
-                const items = group.items.filter((item) => item.unit === 'm2')
-                if (!items.length) return null
-                return (
-                  <optgroup key={group.group} label={group.group}>
-                    {items.map((item) => (
-                      <option key={item.key} value={item.key}>{item.label}</option>
-                    ))}
-                  </optgroup>
-                )
-              })}
+              <option value='low'>Low</option><option value='medium'>Medium</option><option value='high'>High</option>
             </select>
+            <div className='text-xs text-muted-foreground'>Base fee (auto): {currency(baseFee)}</div>
           </div>
-          <div>
-            <div className='text-xs text-zinc-400 mb-1'>Size (m²)</div>
-            <input
+          <div className="space-y-2">
+            <div className='flex items-center justify-between'>
+              <Label>Overall discount (%)</Label>
+              <span className='text-xs text-muted-foreground'>{overallDiscountPct.toFixed(0)}%</span>
+            </div>
+            <Input
               type='number'
               min={0}
-              step={10}
-              className='w-full bg-zinc-800 rounded-xl p-2'
-              value={aecomSize}
-              onChange={(e) => setAecomSize(Number(e.target.value))}
+              max={100}
+              value={overallDiscountPct}
+              onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
+            />
+            <input
+              type='range'
+              min={0}
+              max={100}
+              step={1}
+              value={overallDiscountPct}
+              onChange={(e) => handleOverallDiscountChange(Number(e.target.value))}
+              className='w-full accent-primary h-2 bg-secondary rounded-lg appearance-none cursor-pointer'
             />
           </div>
-          <div>
-            <div className='text-xs text-zinc-400 mb-1'>Rate selection</div>
-            <div className='flex gap-1'>
-              {(['min', 'mid', 'max'] as const).map((choice) => (
-                <button
-                  key={choice}
-                  type='button'
-                  className={`flex-1 text-xs px-2 py-1 rounded-lg border transition-colors ${aecomRateChoice === choice ? 'bg-emerald-500/20 border-emerald-500 text-emerald-200' : 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700'}`}
-                  onClick={() => setAecomRateChoice(choice)}
-                >
-                  {choice === 'mid' ? 'Mid (avg)' : choice === 'min' ? 'Min' : 'Max'}
-                </button>
-              ))}
+        </div>
+
+        <div className='bg-muted/50 border rounded-lg p-4 space-y-4'>
+          <div className='flex items-center justify-between gap-3 flex-wrap'>
+            <div>
+              <div className='text-sm font-medium'>AECOM Value of Works helper</div>
+              <div className='text-xs text-muted-foreground'>Select a building type and area to estimate the VOW.</div>
+            </div>
+            <Button
+              variant={aecomEstimate > 0 ? "default" : "secondary"}
+              disabled={aecomEstimate <= 0}
+              onClick={() => { if (aecomEstimate > 0) setVow(aecomEstimate) }}
+            >
+              Use estimate ({currency(aecomEstimate)})
+            </Button>
+          </div>
+          <div className='grid md:grid-cols-4 gap-4'>
+            <div className='md:col-span-2 space-y-2'>
+              <Label>Building type</Label>
+              <select
+                className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
+                value={selectedAecom?.key || ''}
+                onChange={(e) => setAecomKey(e.target.value)}
+              >
+                {AECOM_RATES.map((group) => {
+                  const items = group.items.filter((item) => item.unit === 'm2')
+                  if (!items.length) return null
+                  return (
+                    <optgroup key={group.group} label={group.group}>
+                      {items.map((item) => (
+                        <option key={item.key} value={item.key}>{item.label}</option>
+                      ))}
+                    </optgroup>
+                  )
+                })}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label>Size (m²)</Label>
+              <Input
+                type='number'
+                min={0}
+                step={10}
+                value={aecomSize}
+                onChange={(e) => setAecomSize(Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Rate selection</Label>
+              <div className='flex gap-1'>
+                {(['min', 'mid', 'max'] as const).map((choice) => (
+                  <Button
+                    key={choice}
+                    type='button'
+                    variant={aecomRateChoice === choice ? "default" : "outline"}
+                    size="sm"
+                    className="flex-1 text-xs px-2"
+                    onClick={() => setAecomRateChoice(choice)}
+                  >
+                    {choice === 'mid' ? 'Mid' : choice === 'min' ? 'Min' : 'Max'}
+                  </Button>
+                ))}
+              </div>
             </div>
           </div>
+          <div className='text-xs text-muted-foreground flex flex-wrap gap-3'>
+            {selectedAecom && (
+              <>
+                <span>Range: {currency(selectedAecom.min)} – {currency(selectedAecom.max)} per m²</span>
+                <span>Using: {currency(aecomRate)} per m²</span>
+              </>
+            )}
+            <span>Estimated VOW: {currency(aecomEstimate)}</span>
+          </div>
         </div>
-        <div className='text-xs text-zinc-400 flex flex-wrap gap-3'>
-          {selectedAecom && (
-            <>
-              <span>Range: {currency(selectedAecom.min)} – {currency(selectedAecom.max)} per m²</span>
-              <span>Using: {currency(aecomRate)} per m²</span>
-            </>
-          )}
-          <span>Estimated VOW: {currency(aecomEstimate)}</span>
-        </div>
-      </div>
 
-      <div className='overflow-x-auto rounded-xl ring-1 ring-white/5'>
-        <table className='w-full text-sm'>
-          <thead><tr className='bg-white/5 text-left'><th className='p-2'>Stage</th><th className='p-2'>% of base</th><th className='p-2'>Discount %</th><th className='p-2'>Override (ZAR)</th><th className='p-2'>Amount</th></tr></thead>
-          <tbody>
-            {rows.map((r, idx) => (
-              <tr key={idx} className='border-t border-zinc-800'>
-                <td className='py-2 px-2'><label className='flex items-center gap-2'><input type='checkbox' checked={r.enabled} onChange={(e) => setStages(cur => cur.map((x, i) => i === idx ? { ...x, enabled: e.target.checked } : x))} /><span>{r.name}</span></label></td>
-                <td className='py-2'><input type='number' min={0} className='w-20 bg-zinc-800 rounded-xl p-2' value={r.pct} onChange={(e) => setStages(cur => cur.map((x, i) => i === idx ? { ...x, pct: Number(e.target.value) } : x))} /></td>
-                <td className='py-2'><input type='number' min={0} max={100} className='w-24 bg-zinc-800 rounded-xl p-2' value={r.discountPct || ''} onChange={(e) => setStages(cur => cur.map((x, i) => i === idx ? { ...x, discountPct: Number(e.target.value) } : x))} /></td>
-                <td className='py-2'><input type='number' min={0} className='w-28 bg-zinc-800 rounded-xl p-2' value={r.override} onChange={(e) => setStages(cur => cur.map((x, i) => i === idx ? { ...x, override: Number(e.target.value) } : x))} /></td>
-                <td className='py-2'>{currency(r.enabled ? r.amount : 0)}</td>
-              </tr>
-            ))}
-            <tr className='border-t border-zinc-800 font-medium text-amber-300'>
-              <td className='py-2 px-2' colSpan={4}>Total discount amount</td>
-              <td className='py-2'>{currency(totalDiscountAmount)}</td>
-            </tr>
-            <tr className='border-t border-zinc-800 font-medium'><td className='py-2 px-2'>TOTAL (ex VAT)</td><td colSpan={3}></td><td className='py-2'>{currency(subtotal)}</td></tr>
-            <tr className='border-t border-zinc-800'><td className='py-2 px-2'>VAT ({vatPct}%)</td><td colSpan={3}></td><td className='py-2'>{currency(vat)}</td></tr>
-            <tr className='border-t border-zinc-800 font-medium text-lg'><td className='py-2 px-2'>TOTAL (inc VAT)</td><td colSpan={3}></td><td className='py-2'>{currency(total)}</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Stage</TableHead>
+                <TableHead>% of base</TableHead>
+                <TableHead>Discount %</TableHead>
+                <TableHead>Override (ZAR)</TableHead>
+                <TableHead>Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r, idx) => (
+                <TableRow key={idx}>
+                  <TableCell>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        checked={r.enabled}
+                        onCheckedChange={(checked) => setStages(cur => cur.map((x, i) => i === idx ? { ...x, enabled: !!checked } : x))}
+                      />
+                      <span>{r.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type='number'
+                      min={0}
+                      className="h-8 w-20"
+                      value={r.pct}
+                      onChange={(e) => setStages(cur => cur.map((x, i) => i === idx ? { ...x, pct: Number(e.target.value) } : x))}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type='number'
+                      min={0}
+                      max={100}
+                      className="h-8 w-24"
+                      value={r.discountPct || ''}
+                      onChange={(e) => setStages(cur => cur.map((x, i) => i === idx ? { ...x, discountPct: Number(e.target.value) } : x))}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Input
+                      type='number'
+                      min={0}
+                      className="h-8 w-28"
+                      value={r.override}
+                      onChange={(e) => setStages(cur => cur.map((x, i) => i === idx ? { ...x, override: Number(e.target.value) } : x))}
+                    />
+                  </TableCell>
+                  <TableCell className={!r.enabled ? 'text-muted-foreground' : ''}>
+                    {currency(r.enabled ? r.amount : 0)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+            <TableFooter>
+              <TableRow>
+                <TableCell colSpan={4} className="text-right font-medium text-primary">Total discount amount</TableCell>
+                <TableCell>{currency(totalDiscountAmount)}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell colSpan={4} className="text-right font-medium">TOTAL (ex VAT)</TableCell>
+                <TableCell className="font-bold">{currency(subtotal)}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell colSpan={4} className="text-right font-medium">VAT ({vatPct}%)</TableCell>
+                <TableCell className="font-bold">{currency(vat)}</TableCell>
+              </TableRow>
+              <TableRow className="bg-muted font-bold text-lg">
+                <TableCell colSpan={4} className="text-right">TOTAL (inc VAT)</TableCell>
+                <TableCell>{currency(total)}</TableCell>
+              </TableRow>
+            </TableFooter>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

@@ -9,17 +9,17 @@ import {
   type ProjectRow,
   type ProjectShare,
 } from '../services/supabaseService';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Badge } from 'lucide-react'; // Wait, Badge is not in lucide-react. I'll use a simple span or create a Badge component.
+// Actually, I'll just use a styled span for now as I didn't create a Badge component.
+import { ChevronDown, ChevronUp, Search, Trash2, Share2, FolderOpen } from 'lucide-react';
 
 interface ProjectsListProps {
   onSelectProject?: (projectId: string) => void;
 }
 
-/**
- * Projects list with:
- * - Owned + shared projects
- * - Client-side search by name / client
- * - Owners: share/unshare via email, delete
- */
 export function ProjectsList({ onSelectProject }: ProjectsListProps) {
   const { user } = useSupabaseAuth();
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -110,135 +110,134 @@ export function ProjectsList({ onSelectProject }: ProjectsListProps) {
   const projectCount = projects.length;
 
   return (
-    <section className="bg-zinc-900 rounded-2xl px-4 py-3 space-y-3">
-      <div className="flex items-center justify-between gap-3">
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-xl font-semibold">Projects</h2>
-          <span className="text-xs bg-zinc-800 rounded-full px-2 py-1 text-zinc-300">
+          <CardTitle>Projects</CardTitle>
+          <span className="text-xs bg-secondary text-secondary-foreground rounded-full px-2 py-0.5">
             {projectCount}
           </span>
         </div>
-        <button
-          className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-sm px-3 py-2 rounded-lg transition-colors"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setIsOpen((v) => !v)}
           aria-expanded={isOpen}
         >
-          <span>Projects</span>
-          <svg
-            className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-      </div>
+          {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </Button>
+      </CardHeader>
 
-      <div
-        className={`grid transition-all duration-300 ease-in-out overflow-hidden ${
-          isOpen ? 'max-h-[1200px] opacity-100 translate-y-0' : 'max-h-0 opacity-0 -translate-y-1'
-        }`}
-      >
-        <div className="space-y-3 pb-1">
-          <div className="flex items-center justify-between gap-2">
-            <input
-              className="bg-zinc-800 rounded-xl px-3 py-2 text-sm w-full md:w-72"
-              placeholder="Search by project or client..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            {loading && <p className="text-xs text-zinc-400">Loading...</p>}
+      {isOpen && (
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                placeholder="Search by project or client..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            {loading && <p className="text-xs text-muted-foreground">Loading...</p>}
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <div className="space-y-3">
+          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
             {filteredProjects.map((p) => (
-              <div key={p.id} className="bg-zinc-800 rounded-xl p-3 space-y-2 shadow-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-lg font-semibold">{p.name}</div>
-                    <div className="text-sm text-zinc-400">
-                      {p.client_name || 'No client'} • {p.isOwner ? 'Owner' : 'Shared with you'}
+              <Card key={p.id} className="bg-muted/30">
+                <CardContent className="p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-semibold">{p.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {p.client_name || 'No client'} • {p.isOwner ? 'Owner' : 'Shared with you'}
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {onSelectProject && (
-                      <button
-                        className="px-3 py-2 bg-amber-400 text-zinc-900 rounded-lg text-sm"
-                        onClick={() => onSelectProject(p.id)}
-                      >
-                        Open
-                      </button>
-                    )}
-                    {p.isOwner && (
-                      <>
-                        <button
-                          className="px-3 py-2 bg-zinc-700 text-white rounded-lg text-sm"
-                          onClick={() => toggleSharePanel(p.id)}
+                    <div className="flex items-center gap-2">
+                      {onSelectProject && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => onSelectProject(p.id)}
                         >
-                          {activeShareProject === p.id ? 'Close Sharing' : 'Share'}
-                        </button>
-                        <button
-                          className="px-3 py-2 bg-red-500 text-white rounded-lg text-sm"
-                          onClick={() => handleDelete(p.id)}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {activeShareProject === p.id && p.isOwner && (
-                  <div className="bg-zinc-900 rounded-lg p-3 space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        className="flex-1 bg-zinc-800 rounded-lg px-3 py-2 text-sm"
-                        placeholder="User email to share with"
-                        value={shareEmail}
-                        onChange={(e) => setShareEmail(e.target.value)}
-                      />
-                      <button
-                        className="px-3 py-2 bg-emerald-500 text-white rounded-lg text-sm"
-                        onClick={() => handleShare(p.id)}
-                        disabled={!shareEmail.trim()}
-                      >
-                        Share
-                      </button>
-                    </div>
-                    <div className="text-sm text-zinc-400">Shared with:</div>
-                    <div className="space-y-1">
-                      {(shares[p.id] ?? []).length === 0 && (
-                        <div className="text-xs text-zinc-500">No shared users yet.</div>
+                          <FolderOpen className="mr-2 h-3 w-3" />
+                          Open
+                        </Button>
                       )}
-                      {(shares[p.id] ?? []).map((s) => (
-                        <div key={s.id} className="flex items-center justify-between text-sm">
-                          <span>{s.shared_with_email || s.shared_with_user_id}</span>
-                          <button
-                            className="text-red-400 text-xs"
-                            onClick={() => handleUnshare(p.id, s.id)}
+                      {p.isOwner && (
+                        <>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => toggleSharePanel(p.id)}
+                            title="Share"
                           >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
+                            <Share2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDelete(p.id)}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
+
+                  {activeShareProject === p.id && p.isOwner && (
+                    <div className="bg-background rounded-lg p-3 space-y-3 border">
+                      <div className="flex gap-2">
+                        <Input
+                          className="flex-1"
+                          placeholder="User email to share with"
+                          value={shareEmail}
+                          onChange={(e) => setShareEmail(e.target.value)}
+                        />
+                        <Button
+                          onClick={() => handleShare(p.id)}
+                          disabled={!shareEmail.trim()}
+                        >
+                          Share
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-xs font-medium text-muted-foreground">Shared with:</div>
+                        {(shares[p.id] ?? []).length === 0 && (
+                          <div className="text-xs text-muted-foreground italic">No shared users yet.</div>
+                        )}
+                        {(shares[p.id] ?? []).map((s) => (
+                          <div key={s.id} className="flex items-center justify-between text-sm bg-muted/50 p-2 rounded">
+                            <span>{s.shared_with_email || s.shared_with_user_id}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 text-destructive hover:text-destructive"
+                              onClick={() => handleUnshare(p.id, s.id)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             ))}
 
             {!filteredProjects.length && !loading && (
-              <p className="text-sm text-zinc-500">No projects found.</p>
+              <p className="text-sm text-muted-foreground text-center py-4">No projects found.</p>
             )}
           </div>
-        </div>
-      </div>
-    </section>
+        </CardContent>
+      )}
+    </Card>
   );
 }

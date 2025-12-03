@@ -10,6 +10,11 @@ import {
   fetchLatestTimestampsByProject,
 } from '../services/supabaseService';
 import { downloadSnapshotPdf } from '../services/reportService';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Label } from './ui/label';
+import { LogOut, Save, Download, RefreshCw, Plus } from 'lucide-react';
 
 interface ProjectSyncPanelProps {
   clientName: string;
@@ -156,106 +161,115 @@ export function ProjectSyncPanel(props: ProjectSyncPanelProps) {
   };
 
   return (
-    <section className="p-3 bg-zinc-900 rounded-2xl shadow space-y-3">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div>
-          <h2 className="text-lg font-medium">Supabase Projects</h2>
-          <p className="text-sm text-zinc-400">Login required. All data is saved per user.</p>
+          <CardTitle>Supabase Projects</CardTitle>
+          <p className="text-sm text-muted-foreground">Login required. All data is saved per user.</p>
         </div>
-        <button className="text-sm text-amber-300" onClick={() => signOut()}>
+        <Button variant="ghost" size="sm" className="text-amber-500 hover:text-amber-600" onClick={() => signOut()}>
+          <LogOut className="mr-2 h-4 w-4" />
           Sign out
-        </button>
-      </div>
-
-      <form className="grid md:grid-cols-3 gap-2" onSubmit={handleCreateProject}>
-        <input
-          className="bg-zinc-800 rounded-xl p-2"
-          placeholder="Project name"
-          value={projectForm.name}
-          onChange={(e) => setProjectForm((v) => ({ ...v, name: e.target.value }))}
-          required
-        />
-        <input
-          className="bg-zinc-800 rounded-xl p-2"
-          placeholder="Client (optional)"
-          value={projectForm.client_name}
-          onChange={(e) => setProjectForm((v) => ({ ...v, client_name: e.target.value }))}
-        />
-        <div className="flex gap-2">
-          <input
-            className="bg-zinc-800 rounded-xl p-2 flex-1"
-            placeholder="Site address (optional)"
-            value={projectForm.site_address}
-            onChange={(e) => setProjectForm((v) => ({ ...v, site_address: e.target.value }))}
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <form className="grid md:grid-cols-3 gap-3" onSubmit={handleCreateProject}>
+          <Input
+            placeholder="Project name"
+            value={projectForm.name}
+            onChange={(e) => setProjectForm((v) => ({ ...v, name: e.target.value }))}
+            required
           />
-          <button
-            type="submit"
-            className="bg-amber-400 text-zinc-900 font-semibold rounded-xl px-3"
-            disabled={loading}
-          >
-            New
-          </button>
-        </div>
-      </form>
+          <Input
+            placeholder="Client (optional)"
+            value={projectForm.client_name}
+            onChange={(e) => setProjectForm((v) => ({ ...v, client_name: e.target.value }))}
+          />
+          <div className="flex gap-2">
+            <Input
+              className="flex-1"
+              placeholder="Site address (optional)"
+              value={projectForm.site_address}
+              onChange={(e) => setProjectForm((v) => ({ ...v, site_address: e.target.value }))}
+            />
+            <Button type="submit" disabled={loading}>
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        </form>
 
-      <div className="flex gap-2 flex-wrap items-center">
-        <select
-          className="bg-zinc-800 rounded-xl p-2 min-w-[200px]"
-          value={selectedProjectId}
-          onChange={(e) => {
-            setSelectedProjectId(e.target.value);
-            props.onProjectSelected?.(e.target.value);
-          }}
-        >
-          <option value="">Select project</option>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        {selectedProjectId && lastSavedByProject[selectedProjectId] && (
-          <span className="text-xs text-emerald-300">
-            Last saved: {new Date(lastSavedByProject[selectedProjectId]).toLocaleString()}
-          </span>
+        <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
+          <div className='flex-1 w-full'>
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              value={selectedProjectId}
+              onChange={(e) => {
+                setSelectedProjectId(e.target.value);
+                props.onProjectSelected?.(e.target.value);
+              }}
+            >
+              <option value="">Select project</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            {selectedProjectId && lastSavedByProject[selectedProjectId] && (
+              <div className="text-xs text-emerald-500 mt-1">
+                Last saved: {new Date(lastSavedByProject[selectedProjectId]).toLocaleString()}
+              </div>
+            )}
+          </div>
+
+          <div className='flex gap-2 w-full md:w-auto'>
+            <Button
+              variant="outline"
+              onClick={loadFromSupabase}
+              disabled={loading}
+              className='flex-1 md:flex-none'
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Load
+            </Button>
+            <Button
+              variant="default"
+              onClick={saveToSupabase}
+              disabled={loading}
+              className='flex-1 md:flex-none'
+            >
+              <Save className="mr-2 h-4 w-4" />
+              Save
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={exportPdf}
+              disabled={loading || !selectedProjectId}
+              className='flex-1 md:flex-none'
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Export PDF
+            </Button>
+          </div>
+        </div>
+
+        {projects.length > 0 && (
+          <div className="text-xs text-muted-foreground max-h-32 overflow-y-auto border rounded p-2">
+            {projects.map((p) => (
+              <div key={p.id} className='flex justify-between py-1 border-b last:border-0 border-border/50'>
+                <span>{p.name}</span>
+                <span className='text-muted-foreground/70'>{lastSavedByProject[p.id] ? new Date(lastSavedByProject[p.id]).toLocaleDateString() : 'No saves'}</span>
+              </div>
+            ))}
+          </div>
         )}
-        <button
-          className="bg-zinc-800 px-3 py-2 rounded-xl text-sm"
-          onClick={loadFromSupabase}
-          disabled={loading}
-        >
-          Load latest
-        </button>
-        <button
-          className="bg-amber-400 text-zinc-900 px-3 py-2 rounded-xl text-sm font-semibold"
-          onClick={saveToSupabase}
-          disabled={loading}
-        >
-          Save snapshot
-        </button>
-        <button
-          className="bg-zinc-700 text-white px-3 py-2 rounded-xl text-sm"
-          onClick={exportPdf}
-          disabled={loading || !selectedProjectId}
-        >
-          Export PDF
-        </button>
-      </div>
-      {projects.length > 0 && (
-        <div className="text-xs text-zinc-500">
-          {projects.map((p) => (
-            <div key={p.id}>
-              {p.name}: {lastSavedByProject[p.id] ? new Date(lastSavedByProject[p.id]).toLocaleString() : 'No saves yet'}
-            </div>
-          ))}
-        </div>
-      )}
 
-      {message && <p className="text-sm text-amber-300">{message}</p>}
-      <p className="text-xs text-zinc-500">
-        Snapshot includes client/project details, basket rows, VAT totals, and the active tab. CSV/JSON export can be added
-        later if you want.
-      </p>
-    </section>
+        {message && <p className="text-sm text-amber-500 font-medium">{message}</p>}
+        <p className="text-xs text-muted-foreground">
+          Snapshot includes client/project details, basket rows, VAT totals, and the active tab. CSV/JSON export can be added
+          later if you want.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

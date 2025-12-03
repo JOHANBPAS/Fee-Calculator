@@ -7,6 +7,11 @@ import { createSimplePdfFromPages } from '../services/pdfService';
 import { createPdfDoc, drawHeading, drawKeyValue, drawTableRows, drawTextInColumn, finishDoc, CONTENT_WIDTH, MARGIN_LEFT } from '../services/pdfLayout';
 import { HOURS_PER_DAY, SCAN_M2_PER_DAY, MODEL_M2_PER_DAY, BIM_PRESETS, HOURLY_BIM_RATE, BRAND_COLORS } from '../constants';
 import { getProjectDetailsSnapshot, formatExportDate } from '../utils/projectDetails';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { Label } from './ui/label';
+import { Download } from 'lucide-react';
 
 interface BimSectionProps {
   clientName: string;
@@ -78,7 +83,7 @@ export function BimSection({ clientName, vatPct }: BimSectionProps) {
     const introRows = [...projectDetails.rows, ['Exported On', formatExportDate()]];
     exportExcelTable('bim_summary.xls', headers, rows, { intro: { headers: ['Project Detail', 'Value'], rows: introRows } });
   };
-  
+
   const handleExportPdf = () => {
     const doc = createPdfDoc();
     const { columns } = doc;
@@ -103,17 +108,17 @@ export function BimSection({ clientName, vatPct }: BimSectionProps) {
     // Table headers
     const tableCols = bimMethod === 'per_m2'
       ? [
-          columns.label,
-          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.45 + 8, width: CONTENT_WIDTH * 0.2, align: 'left' as const },
-          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.65 + 12, width: CONTENT_WIDTH * 0.15, align: 'left' as const },
-          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.8 + 18, width: CONTENT_WIDTH * 0.2 - 18, align: 'right' as const },
-        ]
+        columns.label,
+        { x: MARGIN_LEFT + CONTENT_WIDTH * 0.45 + 8, width: CONTENT_WIDTH * 0.2, align: 'left' as const },
+        { x: MARGIN_LEFT + CONTENT_WIDTH * 0.65 + 12, width: CONTENT_WIDTH * 0.15, align: 'left' as const },
+        { x: MARGIN_LEFT + CONTENT_WIDTH * 0.8 + 18, width: CONTENT_WIDTH * 0.2 - 18, align: 'right' as const },
+      ]
       : [
-          columns.label,
-          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.45 + 8, width: CONTENT_WIDTH * 0.15, align: 'left' as const },
-          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.6 + 12, width: CONTENT_WIDTH * 0.15, align: 'left' as const },
-          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.75 + 16, width: CONTENT_WIDTH * 0.25 - 16, align: 'right' as const },
-        ];
+        columns.label,
+        { x: MARGIN_LEFT + CONTENT_WIDTH * 0.45 + 8, width: CONTENT_WIDTH * 0.15, align: 'left' as const },
+        { x: MARGIN_LEFT + CONTENT_WIDTH * 0.6 + 12, width: CONTENT_WIDTH * 0.15, align: 'left' as const },
+        { x: MARGIN_LEFT + CONTENT_WIDTH * 0.75 + 16, width: CONTENT_WIDTH * 0.25 - 16, align: 'right' as const },
+      ];
 
     drawTableRows(
       doc,
@@ -177,15 +182,15 @@ export function BimSection({ clientName, vatPct }: BimSectionProps) {
 
     const totals = bimMethod === 'per_m2'
       ? [
-          { label: 'Subtotal (ex VAT)', value: currencyPlain(subtotalBim) },
-          { label: `VAT (${vatPct}%)`, value: currencyPlain(vatBim) },
-          { label: 'TOTAL (inc VAT)', value: currencyPlain(totalBim) },
-        ]
+        { label: 'Subtotal (ex VAT)', value: currencyPlain(subtotalBim) },
+        { label: `VAT (${vatPct}%)`, value: currencyPlain(vatBim) },
+        { label: 'TOTAL (inc VAT)', value: currencyPlain(totalBim) },
+      ]
       : [
-          { label: 'Subtotal (ex VAT)', value: currencyPlain(subtotalHrs) },
-          { label: `VAT (${vatPct}%)`, value: currencyPlain(vatHrs) },
-          { label: 'TOTAL (inc VAT)', value: currencyPlain(totalHrs) },
-        ];
+        { label: 'Subtotal (ex VAT)', value: currencyPlain(subtotalHrs) },
+        { label: `VAT (${vatPct}%)`, value: currencyPlain(vatHrs) },
+        { label: 'TOTAL (inc VAT)', value: currencyPlain(totalHrs) },
+      ];
     totals.forEach((row) => {
       drawTextInColumn(doc, row.label, columns.label, { size: 11, lineHeight: 16, color: BRAND_COLORS.slate });
       drawTextInColumn(doc, row.value, columns.value, { size: 11, lineHeight: 16, color: BRAND_COLORS.charcoal });
@@ -197,84 +202,139 @@ export function BimSection({ clientName, vatPct }: BimSectionProps) {
 
 
   return (
-    <section className='p-3 bg-zinc-900 rounded-2xl shadow space-y-4'>
-      <h2 className='text-lg font-medium'>BIM Scanning & Modelling</h2>
-      <div className='grid md:grid-cols-3 gap-3'>
-        <div>
-          <div className='text-sm mb-1'>Method</div>
-          <select value={bimMethod} onChange={(e) => setBimMethod(e.target.value as BimMethod)} className='w-full bg-zinc-800 rounded-xl p-2'>
-            <option value='per_m2'>Per m2</option>
-            <option value='per_hour'>Hourly</option>
-          </select>
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <CardTitle>BIM Scanning & Modelling</CardTitle>
+        <div className='flex items-center gap-2'>
+          <Button variant="outline" size="sm" onClick={handleExportExcel}>
+            <Download className="mr-2 h-4 w-4" />
+            Excel
+          </Button>
+          <Button variant="default" size="sm" onClick={handleExportPdf}>
+            <Download className="mr-2 h-4 w-4" />
+            PDF
+          </Button>
         </div>
-        <div>
-          <div className='text-sm mb-1'>Area (m2)</div>
-          <input type='number' min={0} step={10} className='w-full bg-zinc-800 rounded-xl p-2' value={bimArea} onChange={(e) => setBimArea(Number(e.target.value))} />
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className='grid md:grid-cols-3 gap-6'>
+          <div className="space-y-2">
+            <Label>Method</Label>
+            <select
+              value={bimMethod}
+              onChange={(e) => setBimMethod(e.target.value as BimMethod)}
+              className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
+            >
+              <option value='per_m2'>Per m2</option>
+              <option value='per_hour'>Hourly</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label>Area (m2)</Label>
+            <Input type='number' min={0} step={10} value={bimArea} onChange={(e) => setBimArea(Number(e.target.value))} />
+          </div>
+          <div className="space-y-2">
+            <Label>Preset</Label>
+            <select
+              className='flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50'
+              value={bimPreset}
+              onChange={(e) => {
+                const v = e.target.value as BimPreset;
+                setBimPreset(v);
+                if (v === 'homes') setBimRates(BIM_PRESETS.homes);
+                else if (v === 'large') setBimRates(BIM_PRESETS.large);
+              }}
+              disabled={bimMethod !== 'per_m2'}
+            >
+              <option value='auto'>Auto (by area)</option>
+              <option value='homes'>Houses (&lt; 500 m2)</option>
+              <option value='large'>Large (&gt; 1000 m2)</option>
+              <option value='custom'>Custom</option>
+            </select>
+          </div>
         </div>
-        <div>
-          <div className='text-sm mb-1'>Preset</div>
-          <select className='w-full bg-zinc-800 rounded-xl p-2' value={bimPreset} onChange={(e) => {
-            const v = e.target.value as BimPreset;
-            setBimPreset(v);
-            if (v === 'homes') setBimRates(BIM_PRESETS.homes);
-            else if (v === 'large') setBimRates(BIM_PRESETS.large);
-          }} disabled={bimMethod !== 'per_m2'}>
-            <option value='auto'>Auto (by area)</option>
-            <option value='homes'>Houses (&lt; 500 m2)</option>
-            <option value='large'>Large (&gt; 1000 m2)</option>
-            <option value='custom'>Custom</option>
-          </select>
-        </div>
-      </div>
 
-      {bimMethod === 'per_m2' ? (
-        <div className='p-3 bg-zinc-800/50 rounded-xl space-y-3'>
-          <div className='grid md:grid-cols-3 gap-3 text-sm'>
-             <div><div className='text-sm mb-1'>Rate/m2: Scan</div><input type='number' min={0} step={0.01} className='w-full bg-zinc-800 rounded-xl p-2' value={bimRates.scan} onChange={(e) => setBimRates(cur => ({ ...cur, scan: Number(e.target.value) }))} /></div>
-             <div><div className='text-sm mb-1'>Rate/m2: Registration</div><input type='number' min={0} step={0.01} className='w-full bg-zinc-800 rounded-xl p-2' value={bimRates.reg} onChange={(e) => setBimRates(cur => ({ ...cur, reg: Number(e.target.value) }))} /></div>
-             <div><div className='text-sm mb-1'>Rate/m2: Model</div><input type='number' min={0} step={0.01} className='w-full bg-zinc-800 rounded-xl p-2' value={bimRates.model} onChange={(e) => setBimRates(cur => ({ ...cur, model: Number(e.target.value) }))} /></div>
-          </div>
-          <div className='grid md:grid-cols-3 gap-3 text-sm'>
-             <div><div className='text-sm mb-1'>Scanning Amount</div><div className='p-2 bg-zinc-800 rounded-xl text-lg font-semibold'>{currency(scanAmount)}</div></div>
-             <div><div className='text-sm mb-1'>Registration Amount</div><div className='p-2 bg-zinc-800 rounded-xl text-lg font-semibold'>{currency(regAmount)}</div></div>
-             <div><div className='text-sm mb-1'>Modelling Amount</div><div className='p-2 bg-zinc-800 rounded-xl text-lg font-semibold'>{currency(modelAmount)}</div></div>
-          </div>
-           <div className='p-3 bg-zinc-900/50 rounded-xl space-y-2'>
-                <h3 className='text-sm font-medium'>Estimated Timeline</h3>
-                <div className='grid md:grid-cols-3 gap-3 text-sm'>
-                    <div><div className='text-xs text-zinc-400 mb-1'>Scanning (~{SCAN_M2_PER_DAY} m²/day)</div><div className='p-2 bg-zinc-800 rounded-xl'>{scanDays.toFixed(1)} days ({scanHours.toFixed(1)} hrs)</div></div>
-                    <div><div className='text-xs text-zinc-400 mb-1'>Registration (1hr / 8 scan hrs)</div><div className='p-2 bg-zinc-800 rounded-xl'>{regHoursEst.toFixed(1)} hours</div></div>
-                    <div><div className='text-xs text-zinc-400 mb-1'>Modelling (~{MODEL_M2_PER_DAY} m²/day)</div><div className='p-2 bg-zinc-800 rounded-xl'>{modelDays.toFixed(1)} days ({modelHoursEst.toFixed(1)} hrs)</div></div>
+        {bimMethod === 'per_m2' ? (
+          <div className='bg-muted/50 border rounded-lg p-4 space-y-4'>
+            <div className='grid md:grid-cols-3 gap-4'>
+              <div className="space-y-2">
+                <Label>Rate/m2: Scan</Label>
+                <Input type='number' min={0} step={0.01} value={bimRates.scan} onChange={(e) => setBimRates(cur => ({ ...cur, scan: Number(e.target.value) }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Rate/m2: Registration</Label>
+                <Input type='number' min={0} step={0.01} value={bimRates.reg} onChange={(e) => setBimRates(cur => ({ ...cur, reg: Number(e.target.value) }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Rate/m2: Model</Label>
+                <Input type='number' min={0} step={0.01} value={bimRates.model} onChange={(e) => setBimRates(cur => ({ ...cur, model: Number(e.target.value) }))} />
+              </div>
+            </div>
+            <div className='grid md:grid-cols-3 gap-4'>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Scanning Amount</Label>
+                <div className='p-2 bg-background border rounded-md text-lg font-semibold'>{currency(scanAmount)}</div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Registration Amount</Label>
+                <div className='p-2 bg-background border rounded-md text-lg font-semibold'>{currency(regAmount)}</div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Modelling Amount</Label>
+                <div className='p-2 bg-background border rounded-md text-lg font-semibold'>{currency(modelAmount)}</div>
+              </div>
+            </div>
+            <div className='bg-background/50 border rounded-lg p-3 space-y-2'>
+              <h3 className='text-sm font-medium'>Estimated Timeline</h3>
+              <div className='grid md:grid-cols-3 gap-4 text-sm'>
+                <div>
+                  <div className='text-xs text-muted-foreground mb-1'>Scanning (~{SCAN_M2_PER_DAY} m²/day)</div>
+                  <div className='font-medium'>{scanDays.toFixed(1)} days ({scanHours.toFixed(1)} hrs)</div>
                 </div>
+                <div>
+                  <div className='text-xs text-muted-foreground mb-1'>Registration (1hr / 8 scan hrs)</div>
+                  <div className='font-medium'>{regHoursEst.toFixed(1)} hours</div>
+                </div>
+                <div>
+                  <div className='text-xs text-muted-foreground mb-1'>Modelling (~{MODEL_M2_PER_DAY} m²/day)</div>
+                  <div className='font-medium'>{modelDays.toFixed(1)} days ({modelHoursEst.toFixed(1)} hrs)</div>
+                </div>
+              </div>
             </div>
-          <div className='grid md:grid-cols-3 gap-3 text-sm'>
-            <div className='p-3 rounded-xl bg-white/5'><div className='text-xs text-zinc-400'>Subtotal</div><div className='text-lg font-semibold'>{currency(subtotalBim)}</div></div>
-            <div className='p-3 rounded-xl bg-white/5'><div className='text-xs text-zinc-400'>VAT ({vatPct}%)</div><div className='text-lg font-semibold'>{currency(vatBim)}</div></div>
-            <div className='p-3 rounded-xl bg-white/5'><div className='text-xs text-zinc-400'>Total</div><div className='text-lg font-semibold'>{currency(totalBim)}</div></div>
+            <div className='grid md:grid-cols-3 gap-4 pt-2 border-t'>
+              <div><div className='text-xs text-muted-foreground'>Subtotal</div><div className='text-lg font-semibold'>{currency(subtotalBim)}</div></div>
+              <div><div className='text-xs text-muted-foreground'>VAT ({vatPct}%)</div><div className='text-lg font-semibold'>{currency(vatBim)}</div></div>
+              <div><div className='text-xs text-muted-foreground'>Total</div><div className='text-lg font-semibold text-primary'>{currency(totalBim)}</div></div>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className='p-3 bg-zinc-800/50 rounded-xl space-y-3'>
-          <div className='grid md:grid-cols-4 gap-3 items-end'>
-            <div className='p-3 rounded-xl bg-zinc-800'>
-                <div className='text-xs text-zinc-400'>Hourly Rate</div>
+        ) : (
+          <div className='bg-muted/50 border rounded-lg p-4 space-y-4'>
+            <div className='grid md:grid-cols-4 gap-4 items-end'>
+              <div className='p-3 rounded-lg bg-background border'>
+                <div className='text-xs text-muted-foreground'>Hourly Rate</div>
                 <div className='text-lg font-semibold'>{currency(HOURLY_BIM_RATE)}</div>
+              </div>
+              <div className="space-y-2">
+                <Label>Scanning (hours)</Label>
+                <Input type='number' min={0} value={bimHrsScan} onChange={(e) => setBimHrsScan(Number(e.target.value))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Registration (hours)</Label>
+                <Input type='number' min={0} value={bimHrsReg} onChange={(e) => setBimHrsReg(Number(e.target.value))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Modelling (hours)</Label>
+                <Input type='number' min={0} value={bimHrsModel} onChange={(e) => setBimHrsModel(Number(e.target.value))} />
+              </div>
             </div>
-            <div><div className='text-sm mb-1'>Scanning (hours)</div><input type='number' min={0} className='w-full bg-zinc-800 rounded-xl p-2' value={bimHrsScan} onChange={(e) => setBimHrsScan(Number(e.target.value))} /></div>
-            <div><div className='text-sm mb-1'>Registration (hours)</div><input type='number' min={0} className='w-full bg-zinc-800 rounded-xl p-2' value={bimHrsReg} onChange={(e) => setBimHrsReg(Number(e.target.value))} /></div>
-            <div><div className='text-sm mb-1'>Modelling (hours)</div><input type='number' min={0} className='w-full bg-zinc-800 rounded-xl p-2' value={bimHrsModel} onChange={(e) => setBimHrsModel(Number(e.target.value))} /></div>
+            <div className='grid md:grid-cols-3 gap-4 pt-2 border-t'>
+              <div><div className='text-xs text-muted-foreground'>Subtotal</div><div className='text-lg font-semibold'>{currency(subtotalHrs)}</div></div>
+              <div><div className='text-xs text-muted-foreground'>VAT ({vatPct}%)</div><div className='text-lg font-semibold'>{currency(vatHrs)}</div></div>
+              <div><div className='text-xs text-muted-foreground'>Total</div><div className='text-lg font-semibold text-primary'>{currency(totalHrs)}</div></div>
+            </div>
           </div>
-          <div className='grid md:grid-cols-3 gap-3'>
-            <div className='p-3 rounded-xl bg-white/5'><div className='text-xs text-zinc-400'>Subtotal</div><div className='text-lg font-semibold'>{currency(subtotalHrs)}</div></div>
-            <div className='p-3 rounded-xl bg-white/5'><div className='text-xs text-zinc-400'>VAT ({vatPct}%)</div><div className='text-lg font-semibold'>{currency(vatHrs)}</div></div>
-            <div className='p-3 rounded-xl bg-white/5'><div className='text-xs text-zinc-400'>Total</div><div className='text-lg font-semibold'>{currency(totalHrs)}</div></div>
-          </div>
-        </div>
-      )}
-      <div className='flex items-center justify-end text-sm gap-2'>
-        <button className='px-3 py-2 bg-zinc-100 text-zinc-900 rounded-xl transition-colors duration-150 hover:bg-zinc-200' onClick={handleExportExcel}>Export Excel</button>
-        <button className='px-3 py-2 bg-emerald-500 text-white rounded-xl transition-colors duration-150 hover:bg-emerald-600' onClick={handleExportPdf}>Export PDF</button>
-      </div>
-    </section>
+        )}
+      </CardContent>
+    </Card>
   );
 }
