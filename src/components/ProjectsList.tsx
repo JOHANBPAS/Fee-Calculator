@@ -110,11 +110,11 @@ export function ProjectsList({ onSelectProject }: ProjectsListProps) {
   const projectCount = projects.length;
 
   return (
-    <Card>
+    <Card className="h-fit">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
         <div className="flex items-center gap-2">
-          <CardTitle>Projects</CardTitle>
-          <span className="text-xs bg-secondary text-secondary-foreground rounded-full px-2 py-0.5">
+          <CardTitle className="text-lg">Projects</CardTitle>
+          <span className="text-xs bg-primary/10 text-primary rounded-full px-2 py-0.5 font-medium">
             {projectCount}
           </span>
         </div>
@@ -131,36 +131,38 @@ export function ProjectsList({ onSelectProject }: ProjectsListProps) {
       {isOpen && (
         <CardContent className="space-y-4">
           <div className="flex items-center gap-2">
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 className="pl-8"
-                placeholder="Search by project or client..."
+                placeholder="Search..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            {loading && <p className="text-xs text-muted-foreground">Loading...</p>}
+            {loading && <p className="text-xs text-muted-foreground whitespace-nowrap">Loading...</p>}
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-border">
             {filteredProjects.map((p) => (
-              <Card key={p.id} className="bg-muted/30">
+              <Card key={p.id} className="bg-muted/30 border-l-4 border-l-transparent hover:border-l-primary transition-colors">
                 <CardContent className="p-3 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <div className="font-semibold">{p.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {p.client_name || 'No client'} • {p.isOwner ? 'Owner' : 'Shared with you'}
+                  <div className="flex flex-col gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate" title={p.name}>{p.name}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {p.client_name || 'No client'} • {p.isOwner ? 'Owner' : 'Shared'}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+
+                    <div className="flex items-center gap-2 flex-wrap">
                       {onSelectProject && (
                         <Button
                           size="sm"
                           variant="secondary"
+                          className="flex-1 h-8 text-xs"
                           onClick={() => onSelectProject(p.id)}
                         >
                           <FolderOpen className="mr-2 h-3 w-3" />
@@ -172,19 +174,20 @@ export function ProjectsList({ onSelectProject }: ProjectsListProps) {
                           <Button
                             size="icon"
                             variant="ghost"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary"
                             onClick={() => toggleSharePanel(p.id)}
                             title="Share"
                           >
-                            <Share2 className="h-4 w-4" />
+                            <Share2 className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="text-destructive hover:text-destructive"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
                             onClick={() => handleDelete(p.id)}
                             title="Delete"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </>
                       )}
@@ -192,15 +195,17 @@ export function ProjectsList({ onSelectProject }: ProjectsListProps) {
                   </div>
 
                   {activeShareProject === p.id && p.isOwner && (
-                    <div className="bg-background rounded-lg p-3 space-y-3 border">
+                    <div className="bg-background rounded-lg p-3 space-y-3 border animate-in slide-in-from-top-2">
                       <div className="flex gap-2">
                         <Input
-                          className="flex-1"
-                          placeholder="User email to share with"
+                          className="flex-1 h-8 text-xs"
+                          placeholder="Email to share"
                           value={shareEmail}
                           onChange={(e) => setShareEmail(e.target.value)}
                         />
                         <Button
+                          size="sm"
+                          className="h-8"
                           onClick={() => handleShare(p.id)}
                           disabled={!shareEmail.trim()}
                         >
@@ -213,15 +218,18 @@ export function ProjectsList({ onSelectProject }: ProjectsListProps) {
                           <div className="text-xs text-muted-foreground italic">No shared users yet.</div>
                         )}
                         {(shares[p.id] ?? []).map((s) => (
-                          <div key={s.id} className="flex items-center justify-between text-sm bg-muted/50 p-2 rounded">
-                            <span>{s.shared_with_email || s.shared_with_user_id}</span>
+                          <div key={s.id} className="flex items-center justify-between text-xs bg-muted/50 p-2 rounded">
+                            <span className="truncate max-w-[120px]" title={s.shared_with_email || s.shared_with_user_id}>
+                              {s.shared_with_email || s.shared_with_user_id}
+                            </span>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 text-destructive hover:text-destructive"
+                              className="h-5 w-5 p-0 text-destructive hover:text-destructive"
                               onClick={() => handleUnshare(p.id, s.id)}
                             >
-                              Remove
+                              <span className="sr-only">Remove</span>
+                              &times;
                             </Button>
                           </div>
                         ))}

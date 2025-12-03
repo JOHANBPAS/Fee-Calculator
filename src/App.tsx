@@ -37,7 +37,7 @@ function App() {
       <AuthGate>
         <Layout>
           <div className="space-y-8">
-            <div className="grid gap-4 md:grid-cols-[300px_1fr]">
+            <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
               <div className="space-y-4">
                 <ProjectsList onSelectProject={(id) => setSelectedProjectId(id)} />
                 <ProjectSyncPanel
