@@ -119,27 +119,122 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
   };
 
   const handleExportExcel = () => {
-    const headers = ['Stage', '% of base', 'Discount %', 'Override (ZAR)', 'Amount (ZAR)'];
-    const excelRows: string[][] = enabledRows.map((r) => [
-      r.name,
-      `${r.pct}%`,
-      `${r.discountPct || 0}%`,
-      currencyPlain(r.override),
-      currencyPlain(r.amount),
-    ]);
-    excelRows.push([]); // spacer
-    if (calculationMode === 'simple') {
-      excelRows.push(['Summary', 'Value of Works', '', '', currencyPlain(vow)]);
+    const excelRows: string[][] = [];
+
+    if (calculationMode === 'advanced') {
+      // Export detailed breakdown for each unit type
+      excelRows.push(['UNIT TYPE BREAKDOWN', '', '', '', '']);
+      excelRows.push([]);
+
+      unitTypes.forEach((unit, unitIdx) => {
+        const unitBaseFee = calculateFee(unit.vow, unit.complexity);
+
+        // Unit header
+        excelRows.push([`${unit.name}`, '', '', '', '']);
+        excelRows.push(['  VOW:', currencyPlain(unit.vow), 'Complexity:', unit.complexity.toUpperCase(), '']);
+        excelRows.push([]);
+
+        // Prototypes section
+        if (unit.numPrototypes > 0) {
+          excelRows.push([`  Prototypes (${unit.numPrototypes} unit${unit.numPrototypes > 1 ? 's' : ''})`, '', '', '', '']);
+
+          enabledRows.forEach((stage) => {
+            const stageFeePerUnit = unitBaseFee * (stage.pct / 100);
+            const discountedStageFee = stageFeePerUnit * Math.max(0, 1 - ((stage.discountPct || 0) / 100));
+            const prototypeAmount = (stage.override > 0 ? (stage.override / baseFee) * unitBaseFee * (stage.pct / 100) : discountedStageFee) * unit.numPrototypes * overallFactor;
+
+            excelRows.push([
+              `    ${stage.name}`,
+              `${stage.pct}%`,
+              `${stage.discountPct || 0}%`,
+              '',
+              currencyPlain(prototypeAmount)
+            ]);
+          });
+
+          const prototypeSubtotal = enabledRows.reduce((acc, stage) => {
+            const stageFeePerUnit = unitBaseFee * (stage.pct / 100);
+            const discountedStageFee = stageFeePerUnit * Math.max(0, 1 - ((stage.discountPct || 0) / 100));
+            const prototypeAmount = (stage.override > 0 ? (stage.override / baseFee) * unitBaseFee * (stage.pct / 100) : discountedStageFee) * unit.numPrototypes * overallFactor;
+            return acc + prototypeAmount;
+          }, 0);
+
+          excelRows.push(['  Prototype Subtotal', '', '', '', currencyPlain(prototypeSubtotal)]);
+          excelRows.push([]);
+        }
+
+        // Repeats section
+        if (unit.numRepeats > 0) {
+          excelRows.push([`  Repeat Units (${unit.numRepeats} unit${unit.numRepeats > 1 ? 's' : ''} @ 35% discount)`, '', '', '', '']);
+
+          enabledRows.forEach((stage) => {
+            const stageFeePerUnit = unitBaseFee * (stage.pct / 100);
+            const discountedStageFee = stageFeePerUnit * Math.max(0, 1 - ((stage.discountPct || 0) / 100));
+            const repeatAmount = (stage.override > 0 ? (stage.override / baseFee) * unitBaseFee * (stage.pct / 100) : discountedStageFee) * 0.35 * unit.numRepeats * overallFactor;
+
+            excelRows.push([
+              `    ${stage.name}`,
+              `${stage.pct}%`,
+              `${stage.discountPct || 0}%`,
+              '',
+              currencyPlain(repeatAmount)
+            ]);
+          });
+
+          const repeatSubtotal = enabledRows.reduce((acc, stage) => {
+            const stageFeePerUnit = unitBaseFee * (stage.pct / 100);
+            const discountedStageFee = stageFeePerUnit * Math.max(0, 1 - ((stage.discountPct || 0) / 100));
+            const repeatAmount = (stage.override > 0 ? (stage.override / baseFee) * unitBaseFee * (stage.pct / 100) : discountedStageFee) * 0.35 * unit.numRepeats * overallFactor;
+            return acc + repeatAmount;
+          }, 0);
+
+          excelRows.push(['  Repeat Subtotal', '', '', '', currencyPlain(repeatSubtotal)]);
+          excelRows.push([]);
+        }
+
+        // Unit total
+        const unitTotal = (unitBaseFee * unit.numPrototypes + unitBaseFee * 0.35 * unit.numRepeats) * overallFactor;
+        excelRows.push([`${unit.name} - TOTAL`, '', '', '', currencyPlain(unitTotal)]);
+        excelRows.push([]);
+        excelRows.push([]);
+      });
+
+      excelRows.push(['═══════════════════════════════════════', '', '', '', '']);
+      excelRows.push([]);
     } else {
-      excelRows.push(['Summary', 'Calculation Mode', 'Advanced (Prototypes & Repeats)', '', '']);
+      // Simple mode - original stage breakdown
+      const headers = ['Stage', '% of base', 'Discount %', 'Override (ZAR)', 'Amount (ZAR)'];
+      excelRows.push(headers);
+
+      enabledRows.forEach((r) => {
+        excelRows.push([
+          r.name,
+          `${r.pct}%`,
+          `${r.discountPct || 0}%`,
+          currencyPlain(r.override),
+          currencyPlain(r.amount),
+        ]);
+      });
+      excelRows.push([]);
     }
-    excelRows.push(['Summary', 'Base Fee', '', '', currencyPlain(baseFee)]);
-    excelRows.push(['Summary', 'Total discount amount', '', '', currencyPlain(totalDiscountAmount)]);
-    excelRows.push(['Summary', 'TOTAL (ex VAT)', '', '', currencyPlain(subtotal)]);
-    excelRows.push(['Summary', `VAT (${vatPct}%)`, '', '', currencyPlain(vat)]);
-    excelRows.push(['Summary', 'TOTAL (inc VAT)', '', '', currencyPlain(total)]);
-    excelRows.push(['Summary', 'Overall discount (%)', `${overallDiscountPct}%`, '', '']);
-    exportExcelTable('sacap.xls', headers, excelRows, { intro: { headers: ['Project Detail', 'Value'], rows: projectDetailRows } });
+
+    // Summary section (common to both modes)
+    excelRows.push(['SUMMARY', '', '', '', '']);
+    if (calculationMode === 'simple') {
+      excelRows.push(['Value of Works', '', '', '', currencyPlain(vow)]);
+    } else {
+      excelRows.push(['Calculation Mode', 'Advanced (Prototypes & Repeats)', '', '', '']);
+      excelRows.push(['Total Unit Types', String(unitTypes.length), '', '', '']);
+    }
+    excelRows.push(['Base Fee', '', '', '', currencyPlain(baseFee)]);
+    excelRows.push(['Total discount amount', '', '', '', currencyPlain(totalDiscountAmount)]);
+    excelRows.push(['Overall discount (%)', `${overallDiscountPct}%`, '', '', '']);
+    excelRows.push([]);
+    excelRows.push(['TOTAL (ex VAT)', '', '', '', currencyPlain(subtotal)]);
+    excelRows.push([`VAT (${vatPct}%)`, '', '', '', currencyPlain(vat)]);
+    excelRows.push(['TOTAL (inc VAT)', '', '', '', currencyPlain(total)]);
+
+    exportExcelTable('sacap.xls', ['Column 1', 'Column 2', 'Column 3', 'Column 4', 'Column 5'], excelRows, { intro: { headers: ['Project Detail', 'Value'], rows: projectDetailRows } });
   };
 
   const handleExportPdf = () => {
@@ -157,43 +252,133 @@ export function SacapSection({ globalVow, vatPct }: SacapSectionProps) {
     ];
     if (calculationMode === 'simple') {
       infoRows.unshift({ label: 'Value of Works', value: currencyPlain(vow) });
+    } else {
+      infoRows.push({ label: 'Total Unit Types', value: String(unitTypes.length) });
     }
     infoRows.forEach((r) => drawKeyValue(doc, r.label, r.value, { size: 11, lineHeight: 15 }));
     doc.cursorY -= 6;
 
-    drawHeading(doc, 'Fee Apportionment Summary', 12, BRAND_COLORS.slate);
+    if (calculationMode === 'advanced') {
+      // Export detailed breakdown for each unit type
+      drawHeading(doc, 'Unit Type Breakdown', 12, BRAND_COLORS.slate);
 
-    const stageCols = [
-      columns.label,
-      { x: MARGIN_LEFT + CONTENT_WIDTH * 0.45 + 8, width: CONTENT_WIDTH * 0.12, align: 'left' as const },
-      { x: MARGIN_LEFT + CONTENT_WIDTH * 0.57 + 10, width: CONTENT_WIDTH * 0.12, align: 'left' as const },
-      { x: MARGIN_LEFT + CONTENT_WIDTH * 0.69 + 12, width: CONTENT_WIDTH * 0.14, align: 'left' as const },
-      { x: MARGIN_LEFT + CONTENT_WIDTH * 0.83 + 14, width: CONTENT_WIDTH * 0.17 - 14, align: 'right' as const },
-    ];
+      unitTypes.forEach((unit, unitIdx) => {
+        const unitBaseFee = calculateFee(unit.vow, unit.complexity);
 
-    drawTableRows(
-      doc,
-      [
+        // Unit header
+        drawHeading(doc, unit.name, 11, BRAND_COLORS.charcoal);
+        drawKeyValue(doc, 'VOW', currencyPlain(unit.vow), { size: 10, lineHeight: 14 });
+        drawKeyValue(doc, 'Complexity', unit.complexity.toUpperCase(), { size: 10, lineHeight: 14 });
+        doc.cursorY -= 4;
+
+        const stageCols = [
+          { x: MARGIN_LEFT + 20, width: CONTENT_WIDTH * 0.5 - 20, align: 'left' as const },
+          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.6, width: CONTENT_WIDTH * 0.2, align: 'left' as const },
+          { x: MARGIN_LEFT + CONTENT_WIDTH * 0.8, width: CONTENT_WIDTH * 0.2, align: 'right' as const },
+        ];
+
+        // Prototypes section
+        if (unit.numPrototypes > 0) {
+          drawKeyValue(doc, 'Prototypes', `${unit.numPrototypes} unit${unit.numPrototypes > 1 ? 's' : ''}`, { size: 10, lineHeight: 14 });
+
+          const prototypeRows = enabledRows.map((stage) => {
+            const stageFeePerUnit = unitBaseFee * (stage.pct / 100);
+            const discountedStageFee = stageFeePerUnit * Math.max(0, 1 - ((stage.discountPct || 0) / 100));
+            const prototypeAmount = (stage.override > 0 ? (stage.override / baseFee) * unitBaseFee * (stage.pct / 100) : discountedStageFee) * unit.numPrototypes * overallFactor;
+
+            return [
+              { text: `  ${stage.name}`, column: stageCols[0], size: 9 },
+              { text: `${stage.pct}%`, column: stageCols[1], size: 9 },
+              { text: currencyPlain(prototypeAmount), column: stageCols[2], size: 9 },
+            ];
+          });
+
+          drawTableRows(doc, prototypeRows, 13);
+
+          const prototypeSubtotal = enabledRows.reduce((acc, stage) => {
+            const stageFeePerUnit = unitBaseFee * (stage.pct / 100);
+            const discountedStageFee = stageFeePerUnit * Math.max(0, 1 - ((stage.discountPct || 0) / 100));
+            const prototypeAmount = (stage.override > 0 ? (stage.override / baseFee) * unitBaseFee * (stage.pct / 100) : discountedStageFee) * unit.numPrototypes * overallFactor;
+            return acc + prototypeAmount;
+          }, 0);
+
+          drawTextInColumn(doc, 'Prototype Subtotal', stageCols[0], { size: 10, lineHeight: 14, color: BRAND_COLORS.slate });
+          drawTextInColumn(doc, currencyPlain(prototypeSubtotal), stageCols[2], { size: 10, lineHeight: 14, color: BRAND_COLORS.charcoal });
+          doc.cursorY -= 4;
+        }
+
+        // Repeats section
+        if (unit.numRepeats > 0) {
+          drawKeyValue(doc, 'Repeat Units', `${unit.numRepeats} unit${unit.numRepeats > 1 ? 's' : ''} @ 35% discount`, { size: 10, lineHeight: 14 });
+
+          const repeatRows = enabledRows.map((stage) => {
+            const stageFeePerUnit = unitBaseFee * (stage.pct / 100);
+            const discountedStageFee = stageFeePerUnit * Math.max(0, 1 - ((stage.discountPct || 0) / 100));
+            const repeatAmount = (stage.override > 0 ? (stage.override / baseFee) * unitBaseFee * (stage.pct / 100) : discountedStageFee) * 0.35 * unit.numRepeats * overallFactor;
+
+            return [
+              { text: `  ${stage.name}`, column: stageCols[0], size: 9 },
+              { text: `${stage.pct}%`, column: stageCols[1], size: 9 },
+              { text: currencyPlain(repeatAmount), column: stageCols[2], size: 9 },
+            ];
+          });
+
+          drawTableRows(doc, repeatRows, 13);
+
+          const repeatSubtotal = enabledRows.reduce((acc, stage) => {
+            const stageFeePerUnit = unitBaseFee * (stage.pct / 100);
+            const discountedStageFee = stageFeePerUnit * Math.max(0, 1 - ((stage.discountPct || 0) / 100));
+            const repeatAmount = (stage.override > 0 ? (stage.override / baseFee) * unitBaseFee * (stage.pct / 100) : discountedStageFee) * 0.35 * unit.numRepeats * overallFactor;
+            return acc + repeatAmount;
+          }, 0);
+
+          drawTextInColumn(doc, 'Repeat Subtotal', stageCols[0], { size: 10, lineHeight: 14, color: BRAND_COLORS.slate });
+          drawTextInColumn(doc, currencyPlain(repeatSubtotal), stageCols[2], { size: 10, lineHeight: 14, color: BRAND_COLORS.charcoal });
+          doc.cursorY -= 4;
+        }
+
+        // Unit total
+        const unitTotal = (unitBaseFee * unit.numPrototypes + unitBaseFee * 0.35 * unit.numRepeats) * overallFactor;
+        drawTextInColumn(doc, `${unit.name} - TOTAL`, stageCols[0], { size: 11, lineHeight: 16, color: BRAND_COLORS.charcoal });
+        drawTextInColumn(doc, currencyPlain(unitTotal), stageCols[2], { size: 11, lineHeight: 16, color: BRAND_COLORS.charcoal });
+        doc.cursorY -= 8;
+      });
+    } else {
+      // Simple mode - original stage breakdown
+      drawHeading(doc, 'Fee Apportionment Summary', 12, BRAND_COLORS.slate);
+
+      const stageCols = [
+        columns.label,
+        { x: MARGIN_LEFT + CONTENT_WIDTH * 0.45 + 8, width: CONTENT_WIDTH * 0.12, align: 'left' as const },
+        { x: MARGIN_LEFT + CONTENT_WIDTH * 0.57 + 10, width: CONTENT_WIDTH * 0.12, align: 'left' as const },
+        { x: MARGIN_LEFT + CONTENT_WIDTH * 0.69 + 12, width: CONTENT_WIDTH * 0.14, align: 'left' as const },
+        { x: MARGIN_LEFT + CONTENT_WIDTH * 0.83 + 14, width: CONTENT_WIDTH * 0.17 - 14, align: 'right' as const },
+      ];
+
+      drawTableRows(
+        doc,
         [
-          { text: 'Stage', column: stageCols[0], size: 11, color: BRAND_COLORS.light },
-          { text: '% of Base', column: stageCols[1], size: 11, color: BRAND_COLORS.light },
-          { text: 'Discount %', column: stageCols[2], size: 11, color: BRAND_COLORS.light },
-          { text: 'Override', column: stageCols[3], size: 11, color: BRAND_COLORS.light },
-          { text: 'Amount', column: stageCols[4], size: 11, color: BRAND_COLORS.light },
+          [
+            { text: 'Stage', column: stageCols[0], size: 11, color: BRAND_COLORS.light },
+            { text: '% of Base', column: stageCols[1], size: 11, color: BRAND_COLORS.light },
+            { text: 'Discount %', column: stageCols[2], size: 11, color: BRAND_COLORS.light },
+            { text: 'Override', column: stageCols[3], size: 11, color: BRAND_COLORS.light },
+            { text: 'Amount', column: stageCols[4], size: 11, color: BRAND_COLORS.light },
+          ],
         ],
-      ],
-      16,
-    );
+        16,
+      );
 
-    const rows = enabledRows.map((r) => [
-      { text: r.name, column: stageCols[0] },
-      { text: `${r.pct}%`, column: stageCols[1] },
-      { text: `${r.discountPct || 0}%`, column: stageCols[2] },
-      { text: currencyPlain(r.override), column: stageCols[3] },
-      { text: currencyPlain(r.amount), column: stageCols[4] },
-    ]);
-    drawTableRows(doc, rows, 16);
-    doc.cursorY -= 8;
+      const rows = enabledRows.map((r) => [
+        { text: r.name, column: stageCols[0] },
+        { text: `${r.pct}%`, column: stageCols[1] },
+        { text: `${r.discountPct || 0}%`, column: stageCols[2] },
+        { text: currencyPlain(r.override), column: stageCols[3] },
+        { text: currencyPlain(r.amount), column: stageCols[4] },
+      ]);
+      drawTableRows(doc, rows, 16);
+      doc.cursorY -= 8;
+    }
 
     const totals = [
       { label: 'Total Discount Amount', value: currencyPlain(totalDiscountAmount) },
